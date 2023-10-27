@@ -1,0 +1,19 @@
+quarkus:
+  log:
+    level: INFO
+  application:
+    name: faf-icebreaker
+
+mp:
+  jwt:
+    verify:
+      issuer: ${HYDRA_TOKEN_ISSUER:http://faf-ory-hydra:4444/}
+      key-format: JWKS
+      publickey:
+        location: ${HYDRA_JWKS_URL:http://localhost:4444/.well-known/jwks.json}
+
+xirsys:
+  enabled: true
+  base-url: "https://global.xirsys.net"
+  ident: ${XIRSYS_IDENT}
+  secret: ${XIRSYS_SECRET}
