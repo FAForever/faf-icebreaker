@@ -1,6 +1,9 @@
 plugins {
-    kotlin("jvm") version "1.9.10"
-    kotlin("plugin.allopen") version "1.9.10"
+    val kotlinVersion = "1.9.10"
+
+    kotlin("jvm") version kotlinVersion
+    kotlin("plugin.allopen") version kotlinVersion
+    kotlin("plugin.noarg") version kotlinVersion
     id("io.quarkus")
     id("com.diffplug.spotless") version "6.20.0"
     id("com.adarshr.test-logger") version "4.0.0"
@@ -32,6 +35,8 @@ dependencies {
     implementation("io.quarkus:quarkus-arc")
     implementation("io.quarkus:quarkus-hibernate-orm")
     implementation("io.quarkus:quarkus-resteasy-reactive")
+    implementation("io.quarkus:quarkus-flyway")
+    implementation("org.flywaydb:flyway-mysql")
     testImplementation("io.quarkus:quarkus-junit5")
     testImplementation("io.rest-assured:rest-assured")
 }
@@ -61,6 +66,31 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
         // For creation of default methods in interfaces
         freeCompilerArgs = listOf("-Xjvm-default=all")
     }
+}
+
+/**
+ * Open Kotlin (data) classes and provide no-args constructor for Java compatibility
+ */
+allOpen {
+    // Quarkus
+    annotation("jakarta.ws.rs.Path")
+    annotation("jakarta.enterprise.context.ApplicationScoped")
+    annotation("io.quarkus.test.junit.QuarkusTest")
+
+    // Hibernate
+    annotation("jakarta.persistence.Entity")
+    annotation("jakarta.persistence.MappedSuperclass")
+    annotation("jakarta.persistence.Embeddable")
+}
+
+/**
+ * Provide no-args constructor for Java compatibility
+ */
+noArg {
+    // Hibernate
+    annotation("jakarta.persistence.Entity")
+    annotation("jakarta.persistence.MappedSuperclass")
+    annotation("jakarta.persistence.Embeddable")
 }
 
 spotless {

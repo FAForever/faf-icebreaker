@@ -16,19 +16,35 @@ import org.eclipse.microprofile.rest.client.inject.RegisterRestClient
 @Consumes(MediaType.APPLICATION_JSON)
 interface XirsysClient {
     @GET
-    @Path("/_ns")
+    @Path("/_ns/{namespace}/{environment}")
     @ClientQueryParam(name = "depth", value = ["10"])
-    fun listChannel(): XirsysResponse<List<String>>
+    fun listChannel(
+        @PathParam("namespace") namespace: String,
+        @PathParam("environment") environment: String,
+    ): XirsysResponse<List<String>>
 
     @PUT
-    @Path("/_ns/{channelpath}")
-    fun createChannel(@PathParam("channelpath") channelName: String): XirsysResponse<Map<String, String>>
+    @Path("/_ns/{namespace}/{environment}/{channelName}")
+    fun createChannel(
+        @PathParam("namespace") namespace: String,
+        @PathParam("environment") environment: String,
+        @PathParam("channelName") channelName: String,
+    ): XirsysResponse<Map<String, String>>
 
     @DELETE
-    @Path("/_ns/{channelpath}")
-    fun deleteChannel(@PathParam("channelpath") channelName: String): XirsysResponse<Int>
+    @Path("/_ns/{namespace}/{environment}/{channelName}")
+    fun deleteChannel(
+        @PathParam("namespace") namespace: String,
+        @PathParam("environment") environment: String,
+        @PathParam("channelName") channelName: String,
+    ): XirsysResponse<Int>
 
     @PUT
-    @Path("/_turn/{channelpath}")
-    fun requestIceServers(@PathParam("channelpath") channelName: String, turnRequest: TurnRequest): XirsysResponse<TurnResponse>
+    @Path("/_turn/{namespace}/{environment}/{channelName}")
+    fun requestIceServers(
+        @PathParam("namespace") namespace: String,
+        @PathParam("environment") environment: String,
+        @PathParam("channelName") channelName: String,
+        turnRequest: TurnRequest,
+    ): XirsysResponse<TurnResponse>
 }

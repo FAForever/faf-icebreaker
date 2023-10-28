@@ -1,9 +1,21 @@
 quarkus:
   log:
     level: INFO
+#    category:
+#      "org.flyway":
+#        level: DEBUG
   application:
     name: faf-icebreaker
-
+  datasource:
+    db-kind: mariadb
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:banana}
+    jdbc:
+      url: ${DB_URL:jdbc:mariadb://localhost:3306/faf-icebreaker?ssl=false}
+  hibernate-orm:
+    physical-naming-strategy: org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy
+  flyway:
+    migrate-at-start: true
 mp:
   jwt:
     verify:
@@ -12,8 +24,12 @@ mp:
       publickey:
         location: ${HYDRA_JWKS_URL:http://localhost:4444/.well-known/jwks.json}
 
+faf:
+  environment: ${ENVIRONMENT:dev}
+  token-lifetime-seconds: 30
 xirsys:
-  enabled: true
+  enabled: ${XIRSYS_ENABLED:true}
   base-url: "https://global.xirsys.net"
   ident: ${XIRSYS_IDENT}
   secret: ${XIRSYS_SECRET}
+  channel-namespace: "faf"

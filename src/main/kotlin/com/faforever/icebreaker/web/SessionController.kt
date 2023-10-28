@@ -1,8 +1,7 @@
 package com.faforever.icebreaker.web
 
-import com.faforever.icebreaker.service.SessionDetails
-import com.faforever.icebreaker.service.xirsys.XirsysSessionManager
-import io.quarkus.security.PermissionsAllowed
+import com.faforever.icebreaker.service.Session
+import com.faforever.icebreaker.service.SessionService
 import jakarta.inject.Singleton
 import jakarta.ws.rs.GET
 import jakarta.ws.rs.Path
@@ -10,16 +9,11 @@ import org.jboss.resteasy.reactive.RestPath
 
 @Path("/session")
 @Singleton
-class SessionController(private val sessionManager: XirsysSessionManager) {
+class SessionController(private val sessionService: SessionService) {
 
+    //    @PermissionsAllowed("USER:lobby")
     @GET
-    @Path("/{sessionId}")
-    @PermissionsAllowed("USER:lobby")
-    fun getSession(@RestPath sessionId: String): SessionDetails {
-        if (!sessionManager.listSessions().contains(sessionId)) {
-            sessionManager.createSession(sessionId)
-        }
-
-        return sessionManager.getIceServers(sessionId)
-    }
+    @Path("/game/{gameId}")
+    fun getSession(@RestPath gameId: Long): Session =
+        sessionService.getSession(gameId)
 }

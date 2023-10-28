@@ -8,4 +8,5 @@ interface XirsysProperties {
     fun baseUrl(): String
     fun ident(): String
     fun secret(): String
+    fun channelNamespace(): String
 }
