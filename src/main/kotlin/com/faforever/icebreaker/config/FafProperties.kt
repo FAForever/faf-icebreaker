@@ -10,4 +10,6 @@ interface FafProperties {
     fun environment(): String
 
     fun tokenLifetimeSeconds(): Long
+
+    fun maxSessionLifeTimeHours(): Long
 }

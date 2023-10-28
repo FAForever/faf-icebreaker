@@ -21,6 +21,7 @@ val quarkusPlatformVersion: String by project
 dependencies {
     implementation(enforcedPlatform("$quarkusPlatformGroupId:$quarkusPlatformArtifactId:$quarkusPlatformVersion"))
     implementation("io.quarkus:quarkus-config-yaml")
+    implementation("io.quarkus:quarkus-scheduler")
     implementation("io.quarkus:quarkus-resteasy-reactive-jackson")
     implementation("io.quarkus:quarkus-container-image-docker")
     implementation("io.quarkus:quarkus-hibernate-orm-panache-kotlin")

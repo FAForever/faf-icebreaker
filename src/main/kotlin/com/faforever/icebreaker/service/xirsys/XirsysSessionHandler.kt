@@ -5,8 +5,11 @@ import com.faforever.icebreaker.service.Session
 import com.faforever.icebreaker.service.SessionHandler
 import jakarta.inject.Singleton
 import org.eclipse.microprofile.rest.client.RestClientBuilder
-import java.io.IOException
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import java.net.URI
+
+private val LOG: Logger = LoggerFactory.getLogger(XirsysSessionHandler::class.java)
 
 @Singleton
 class XirsysSessionHandler(
@@ -26,7 +29,12 @@ class XirsysSessionHandler(
     override val active = xirsysProperties.enabled()
 
     override fun createSession(id: String) {
-        if (listSessions().contains(id)) return
+        if (listSessions().contains(id)) {
+            LOG.debug("Session id $id already exists")
+            return
+        }
+
+        LOG.debug("Creating session id $id")
 
         val result = xirsysClient.createChannel(
             namespace = xirsysProperties.channelNamespace(),
@@ -35,7 +43,7 @@ class XirsysSessionHandler(
         )
 
         if (result is XirsysResponse.Error) {
-            throw IOException(result.code)
+            LOG.error("Creating session failed: ${result.code}")
         }
     }
 
@@ -47,18 +55,21 @@ class XirsysSessionHandler(
         )
 
         if (result is XirsysResponse.Error) {
-            throw IOException(result.code)
+            LOG.error("Deleting session failed: ${result.code}")
         }
     }
 
-    fun listSessions(): List<String> =
+    private fun listSessions(): List<String> =
         when (
             val result = xirsysClient.listChannel(
                 namespace = xirsysProperties.channelNamespace(),
                 environment = fafProperties.environment(),
             )
         ) {
-            is XirsysResponse.Error -> throw IOException(result.code)
+            is XirsysResponse.Error -> emptyList<String>().also {
+                LOG.error("Listing sessions failed: ${result.code}")
+            }
+
             is XirsysResponse.Success -> result.data
         }
 
@@ -71,13 +82,18 @@ class XirsysSessionHandler(
                 turnRequest = TurnRequest(),
             )
         ) {
-            is XirsysResponse.Error -> throw IOException(result.code)
+            is XirsysResponse.Error -> emptyList<Session.Server>().also {
+                LOG.error("Requesting ICE servers failed: ${result.code}")
+            }
+
             is XirsysResponse.Success -> result.data.iceServers.let {
-                Session.Server(
-                    userName = it.username,
-                    secret = it.credential,
-                    iceServerUrls = it.urls,
+                listOf(
+                    Session.Server(
+                        userName = it.username,
+                        secret = it.credential,
+                        iceServerUrls = it.urls,
+                    ),
                 )
             }
-        }.let { listOf(it) }
+        }
 }

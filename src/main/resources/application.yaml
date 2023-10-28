@@ -1,9 +1,6 @@
 quarkus:
   log:
     level: INFO
-#    category:
-#      "org.flyway":
-#        level: DEBUG
   application:
     name: faf-icebreaker
   datasource:
@@ -27,9 +24,17 @@ mp:
 faf:
   environment: ${ENVIRONMENT:dev}
   token-lifetime-seconds: 30
+  max-session-life-time-hours: 24
 xirsys:
   enabled: ${XIRSYS_ENABLED:true}
   base-url: "https://global.xirsys.net"
   ident: ${XIRSYS_IDENT}
   secret: ${XIRSYS_SECRET}
   channel-namespace: "faf"
+
+"%dev":
+   quarkus:
+     log:
+       category:
+         "org.hibernate.SQL":
+           level: DEBUG

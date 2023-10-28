@@ -6,7 +6,7 @@ import jakarta.inject.Singleton
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
-import java.time.LocalDateTime
+import java.time.Instant
 import java.util.UUID
 
 @Entity
@@ -17,7 +17,7 @@ data class IceSessionEntity(
 
     val gameId: Long,
 
-    val createdAt: LocalDateTime,
+    val createdAt: Instant,
 
 ) : PanacheEntityBase
 
@@ -25,4 +25,7 @@ data class IceSessionEntity(
 class IceSessionRepository : PanacheRepository<IceSessionEntity> {
     fun findByGameId(gameId: Long) =
         find("gameId = ?1", gameId).firstResult()
+
+    fun findByCreatedAtLesserThan(instant: Instant) =
+        find("createdAt <= ?1", instant).list()
 }
