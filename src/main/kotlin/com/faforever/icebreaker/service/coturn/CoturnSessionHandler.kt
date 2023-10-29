@@ -53,8 +53,8 @@ class CoturnSessionHandler(
     }
 
     private fun buildUrls(hostName: String, port: Int) = listOf(
-        "stun:$hostName:$port",
-        "turn:$hostName:$port?transport=udp",
-        "turn:$hostName:$port?transport=tcp",
+        "stun://$hostName:$port",
+        "turn://$hostName:$port?transport=udp",
+        "turn://$hostName:$port?transport=tcp",
     )
 }
