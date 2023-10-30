@@ -45,8 +45,8 @@ class CoturnSessionHandler(
         val timestamp = System.currentTimeMillis() / 1000 + fafProperties.tokenLifetimeSeconds()
         val tokenName = "$timestamp:$sessionName"
 
-        val secretKeySpec = SecretKeySpec(presharedKey.encodeToByteArray(), "HmacSHA256")
-        val mac = Mac.getInstance("HmacSHA256")
+        val secretKeySpec = SecretKeySpec(presharedKey.encodeToByteArray(), "HmacSHA1")
+        val mac = Mac.getInstance("HmacSHA1")
         mac.init(secretKeySpec)
 
         val tokenSecret = mac.doFinal(tokenName.encodeToByteArray()).let {
