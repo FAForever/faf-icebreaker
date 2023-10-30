@@ -23,7 +23,7 @@ mp:
 
 faf:
   environment: ${ENVIRONMENT:dev}
-  token-lifetime-seconds: 30
+  token-lifetime-seconds: 86400 # 24h because of lobbies/games/reconnects can happen for a long time
   max-session-life-time-hours: 24
 xirsys:
   enabled: ${XIRSYS_ENABLED:true}
