@@ -5,7 +5,7 @@ data class Session(
     val servers: List<Server>,
 ) {
     data class Server(
-        val name: String,
+        val id: String,
         val username: String,
         val credential: String,
         val urls: List<String>,
