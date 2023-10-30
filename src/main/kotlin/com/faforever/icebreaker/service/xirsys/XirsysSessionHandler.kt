@@ -89,6 +89,7 @@ class XirsysSessionHandler(
             is XirsysResponse.Success -> result.data.iceServers.let {
                 listOf(
                     Session.Server(
+                        name = "xirsys.com",
                         username = it.username,
                         credential = it.credential,
                         urls = it.urls.map { url ->

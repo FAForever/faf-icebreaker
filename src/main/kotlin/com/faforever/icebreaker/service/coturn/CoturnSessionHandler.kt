@@ -31,6 +31,7 @@ class CoturnSessionHandler(
             .map {
                 val (tokenName, tokenSecret) = buildHmac(sessionId, it.presharedKey)
                 Session.Server(
+                    name = it.host,
                     username = tokenName,
                     credential = tokenSecret,
                     urls = buildUrls(hostName = it.host, port = it.port),
