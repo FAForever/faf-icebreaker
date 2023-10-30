@@ -11,7 +11,7 @@ import jakarta.persistence.Table
 
 @Entity
 @Table(name = "coturn_servers")
-data class CoturnServer(
+data class CoturnServerEntity(
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long,
@@ -31,6 +31,6 @@ data class CoturnServer(
 ) : PanacheEntityBase
 
 @Singleton
-class CoturnServerRepository : PanacheRepository<CoturnServer> {
+class CoturnServerRepository : PanacheRepository<CoturnServerEntity> {
     fun findActive() = find("active").list()
 }
