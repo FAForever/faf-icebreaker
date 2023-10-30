@@ -13,10 +13,6 @@ import org.jboss.resteasy.reactive.RestPath
 @Path("/session")
 @Singleton
 class SessionController(private val sessionService: SessionService) {
-    companion object {
-        private const val MEDIA_TYPE_JSON_API = "application/vnd.api+json"
-    }
-
     @GET
     @Produces(MediaType.APPLICATION_JSON)
     @Path("/game/{gameId}")
@@ -29,5 +25,13 @@ class SessionController(private val sessionService: SessionService) {
     @Path("/game/{gameId}")
     @PermissionsAllowed("USER:lobby")
     fun getSessionJsonApi(@RestPath gameId: Long): JsonApiResponse =
-        sessionService.getSession(gameId).toJsonApiResponse()
+        sessionService.getSession(gameId).let {
+            JsonApiResponse.fromObject(
+                JsonApiObject(
+                    type = "iceSession",
+                    id = it.id,
+                    attributes = mapOf("servers" to it.servers),
+                ),
+            )
+        }
 }

@@ -2,6 +2,7 @@ package com.faforever.icebreaker.service.coturn
 
 import com.faforever.icebreaker.config.FafProperties
 import com.faforever.icebreaker.persistence.CoturnServerRepository
+import com.faforever.icebreaker.service.Server
 import com.faforever.icebreaker.service.Session
 import com.faforever.icebreaker.service.SessionHandler
 import jakarta.inject.Singleton
@@ -25,9 +26,11 @@ class CoturnSessionHandler(
         // Coturn has no session handling, we use global access
     }
 
-    override fun getIceServers(sessionId: String): List<Session.Server> =
-        coturnServerRepository.findAll()
-            .list()
+    override fun getIceServers() =
+        coturnServerRepository.findActive().map { Server(name = it.host, region = it.region) }
+
+    override fun getIceServersSession(sessionId: String): List<Session.Server> =
+        coturnServerRepository.findActive()
             .map {
                 val (tokenName, tokenSecret) = buildHmac(sessionId, it.presharedKey)
                 Session.Server(

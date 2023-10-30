@@ -22,6 +22,8 @@ class SessionService(
 ) {
     private val activeSessionHandlers = sessionHandlers.filter { it.active }
 
+    fun getServers(): List<Server> = activeSessionHandlers.flatMap { it.getIceServers() }
+
     @Transactional
     fun getSession(gameId: Long): Session {
         val session = iceSessionRepository.findByGameId(gameId)
@@ -32,7 +34,7 @@ class SessionService(
 
         val servers = activeSessionHandlers.flatMap {
             it.createSession(session.id)
-            it.getIceServers(session.id)
+            it.getIceServersSession(session.id)
         }
 
         return Session(

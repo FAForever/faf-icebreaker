@@ -1,6 +1,7 @@
 package com.faforever.icebreaker.service.xirsys
 
 import com.faforever.icebreaker.config.FafProperties
+import com.faforever.icebreaker.service.Server
 import com.faforever.icebreaker.service.Session
 import com.faforever.icebreaker.service.SessionHandler
 import jakarta.inject.Singleton
@@ -16,6 +17,10 @@ class XirsysSessionHandler(
     private val fafProperties: FafProperties,
     private val xirsysProperties: XirsysProperties,
 ) : SessionHandler {
+    companion object {
+        const val SERVER_NAME = "xirsys.com"
+    }
+
     private val xirsysClient: XirsysClient = RestClientBuilder.newBuilder()
         .baseUri(URI.create(xirsysProperties.baseUrl()))
         .register(
@@ -73,7 +78,9 @@ class XirsysSessionHandler(
             is XirsysResponse.Success -> result.data
         }
 
-    override fun getIceServers(sessionId: String): List<Session.Server> =
+    override fun getIceServers() = listOf(Server(name = SERVER_NAME, region = "Global"))
+
+    override fun getIceServersSession(sessionId: String): List<Session.Server> =
         when (
             val result = xirsysClient.requestIceServers(
                 namespace = xirsysProperties.channelNamespace(),
@@ -89,7 +96,7 @@ class XirsysSessionHandler(
             is XirsysResponse.Success -> result.data.iceServers.let {
                 listOf(
                     Session.Server(
-                        name = "xirsys.com",
+                        name = SERVER_NAME,
                         username = it.username,
                         credential = it.credential,
                         urls = it.urls.map { url ->

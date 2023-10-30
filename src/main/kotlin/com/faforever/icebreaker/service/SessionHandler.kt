@@ -7,5 +7,7 @@ interface SessionHandler {
 
     fun deleteSession(id: String)
 
-    fun getIceServers(sessionId: String): List<Session.Server>
+    fun getIceServers(): List<Server>
+
+    fun getIceServersSession(sessionId: String): List<Session.Server>
 }

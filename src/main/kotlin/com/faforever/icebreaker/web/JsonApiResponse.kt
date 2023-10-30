@@ -1,24 +1,24 @@
 package com.faforever.icebreaker.web
 
-import com.faforever.icebreaker.service.Session
+import com.fasterxml.jackson.annotation.JsonValue
+
+const val MEDIA_TYPE_JSON_API = "application/vnd.api+json"
+
+sealed interface JsonListOrObject
+
+data class JsonApiList(@JsonValue val jsonList: List<JsonApiObject<*>>) : JsonListOrObject
+data class JsonApiObject<T>(
+    val type: String,
+    val id: String,
+    val attributes: T,
+) : JsonListOrObject
 
 data class JsonApiResponse(
-    val data: DataObject<*>,
+    val data: JsonListOrObject,
 ) {
-    data class DataObject<T>(
-        val type: String,
-        val id: String,
-        val attributes: T,
-    )
-}
+    companion object {
+        fun fromList(jsonList: List<JsonApiObject<*>>) = JsonApiResponse(JsonApiList(jsonList))
 
-fun Session.toJsonApiResponse() =
-    JsonApiResponse(
-        data = JsonApiResponse.DataObject(
-            type = "iceSession",
-            id = id,
-            attributes = mapOf<String, Any>(
-                "servers" to servers,
-            ),
-        ),
-    )
+        fun fromObject(jsonObject: JsonApiObject<*>) = JsonApiResponse(jsonObject)
+    }
+}
