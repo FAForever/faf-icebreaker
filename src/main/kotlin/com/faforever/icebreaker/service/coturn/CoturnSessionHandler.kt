@@ -27,7 +27,7 @@ class CoturnSessionHandler(
     }
 
     override fun getIceServers() =
-        coturnServerRepository.findActive().map { Server(name = it.host, region = it.region) }
+        coturnServerRepository.findActive().map { Server(id = it.host, region = it.region) }
 
     override fun getIceServersSession(sessionId: String): List<Session.Server> =
         coturnServerRepository.findActive()

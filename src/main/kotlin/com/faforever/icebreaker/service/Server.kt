@@ -1,6 +1,6 @@
 package com.faforever.icebreaker.service
 
 data class Server(
-    val name: String,
+    val id: String,
     val region: String,
 )

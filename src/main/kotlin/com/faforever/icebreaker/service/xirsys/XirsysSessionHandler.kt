@@ -78,7 +78,7 @@ class XirsysSessionHandler(
             is XirsysResponse.Success -> result.data
         }
 
-    override fun getIceServers() = listOf(Server(name = SERVER_NAME, region = "Global"))
+    override fun getIceServers() = listOf(Server(id = SERVER_NAME, region = "Global"))
 
     override fun getIceServersSession(sessionId: String): List<Session.Server> =
         when (

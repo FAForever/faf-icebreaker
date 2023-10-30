@@ -26,7 +26,7 @@ class ServerController(private val sessionService: SessionService) {
         sessionService.getServers().map {
             JsonApiObject(
                 type = "iceServer",
-                id = it.name,
+                id = it.id,
                 attributes = mapOf("region" to it.region),
             )
         },
