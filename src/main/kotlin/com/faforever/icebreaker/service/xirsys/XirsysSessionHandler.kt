@@ -19,6 +19,11 @@ class XirsysSessionHandler(
 ) : SessionHandler {
     companion object {
         const val SERVER_NAME = "xirsys.com"
+
+        private val regionalUriRegex = Regex(pattern = "(?<protocol>\\w+):[\\w-]+\\.xirsys\\.com(?<query>.*)")
+        private val regionalUriReplace = "\${protocol}://global.xirsys.net\${query}"
+        fun normalizeAndReplaceUriWithGlobal(regionalUri: String) =
+            regionalUriRegex.replace(input = regionalUri, replacement = regionalUriReplace)
     }
 
     private val xirsysClient: XirsysClient = RestClientBuilder.newBuilder()
@@ -103,7 +108,7 @@ class XirsysSessionHandler(
                             // A sample response looks like "stun:fr-turn1.xirsys.com"
                             // The java URI class fails to read host and port due to the missing // after the :
                             // Thus we "normalize" the uri, even though it is technically valid
-                            url.replaceFirst(":", "://")
+                            normalizeAndReplaceUriWithGlobal(url)
                         },
                     ),
                 )
