@@ -28,4 +28,17 @@ class IceSessionRepository : PanacheRepository<IceSessionEntity> {
 
     fun findByCreatedAtLesserThan(instant: Instant) =
         find("createdAt <= ?1", instant).list()
+
+    fun acquireGameLock(gameId: Long, timeout: Int = 10) {
+        getEntityManager().createNativeQuery("SELECT GET_LOCK(:lockName,:timeout)", Boolean::class.java).apply {
+            setParameter("lockName", "game_id_$gameId")
+            setParameter("timeout", timeout)
+        }.singleResult
+    }
+
+    fun releaseGameLock(gameId: Long) {
+        getEntityManager().createNativeQuery("SELECT RELEASE_LOCK(:lockName)", Boolean::class.java).apply {
+            setParameter("lockName", "game_id_$gameId")
+        }.singleResult
+    }
 }

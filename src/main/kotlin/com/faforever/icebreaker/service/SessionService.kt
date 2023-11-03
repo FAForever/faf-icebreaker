@@ -26,21 +26,27 @@ class SessionService(
 
     @Transactional
     fun getSession(gameId: Long): Session {
-        val session = iceSessionRepository.findByGameId(gameId)
-            ?: IceSessionEntity(gameId = gameId, createdAt = Instant.now()).also {
-                LOG.debug("Creating session for gameId $gameId")
-                iceSessionRepository.persist(it)
+        try {
+            iceSessionRepository.acquireGameLock(gameId)
+
+            val session = iceSessionRepository.findByGameId(gameId)
+                ?: IceSessionEntity(gameId = gameId, createdAt = Instant.now()).also {
+                    LOG.debug("Creating session for gameId $gameId")
+                    iceSessionRepository.persist(it)
+                }
+
+            val servers = activeSessionHandlers.flatMap {
+                it.createSession(session.id)
+                it.getIceServersSession(session.id)
             }
 
-        val servers = activeSessionHandlers.flatMap {
-            it.createSession(session.id)
-            it.getIceServersSession(session.id)
+            return Session(
+                id = session.id,
+                servers = servers,
+            )
+        } finally {
+            iceSessionRepository.releaseGameLock(gameId)
         }
-
-        return Session(
-            id = session.id,
-            servers = servers,
-        )
     }
 
     @Transactional
