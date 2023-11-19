@@ -19,6 +19,7 @@ val quarkusPlatformArtifactId: String by project
 val quarkusPlatformVersion: String by project
 
 dependencies {
+    implementation("io.quarkus:quarkus-smallrye-fault-tolerance")
     implementation(enforcedPlatform("$quarkusPlatformGroupId:$quarkusPlatformArtifactId:$quarkusPlatformVersion"))
     implementation("io.quarkus:quarkus-config-yaml")
     implementation("io.quarkus:quarkus-scheduler")
@@ -31,7 +32,6 @@ dependencies {
     implementation("io.quarkus:quarkus-smallrye-health")
     implementation("io.quarkus:quarkus-rest-client-reactive-jackson")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
-    implementation("io.quarkus:quarkus-container-image-jib")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
     implementation("io.quarkus:quarkus-arc")
     implementation("io.quarkus:quarkus-hibernate-orm")
