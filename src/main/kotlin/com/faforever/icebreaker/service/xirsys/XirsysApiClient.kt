@@ -14,14 +14,14 @@ import org.eclipse.microprofile.rest.client.inject.RegisterRestClient
 @ApplicationScoped
 @RegisterRestClient
 @Consumes(MediaType.APPLICATION_JSON)
-interface XirsysClient {
+interface XirsysApiClient {
     @GET
     @Path("/_ns/{namespace}/{environment}")
     @ClientQueryParam(name = "depth", value = ["10"])
     fun listChannel(
         @PathParam("namespace") namespace: String,
         @PathParam("environment") environment: String,
-    ): XirsysResponse<List<String>>
+    ): String
 
     @PUT
     @Path("/_ns/{namespace}/{environment}/{channelName}")
@@ -29,7 +29,7 @@ interface XirsysClient {
         @PathParam("namespace") namespace: String,
         @PathParam("environment") environment: String,
         @PathParam("channelName") channelName: String,
-    ): XirsysResponse<Map<String, String>>
+    ): String
 
     @DELETE
     @Path("/_ns/{namespace}/{environment}/{channelName}")
@@ -37,7 +37,7 @@ interface XirsysClient {
         @PathParam("namespace") namespace: String,
         @PathParam("environment") environment: String,
         @PathParam("channelName") channelName: String,
-    ): XirsysResponse<Int>
+    ): String
 
     @PUT
     @Path("/_turn/{namespace}/{environment}/{channelName}")
@@ -46,5 +46,5 @@ interface XirsysClient {
         @PathParam("environment") environment: String,
         @PathParam("channelName") channelName: String,
         turnRequest: TurnRequest,
-    ): XirsysResponse<TurnResponse>
+    ): String
 }
