@@ -19,7 +19,7 @@ sealed interface XirsysResponse<T : Any> {
 @JsonInclude(JsonInclude.Include.NON_NULL)
 data class TurnRequest(
     @JsonFormat(shape = JsonFormat.Shape.STRING)
-    val expire: Int = 30,
+    val expire: Long = 30,
 ) {
     val format: String = "urls"
 }
