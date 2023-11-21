@@ -1,5 +1,6 @@
 package com.faforever.icebreaker.service.xirsys
 
+import com.faforever.icebreaker.config.FafProperties
 import com.faforever.icebreaker.service.Server
 import com.faforever.icebreaker.service.Session
 import com.faforever.icebreaker.service.SessionHandler
@@ -12,6 +13,7 @@ private val LOG: Logger = LoggerFactory.getLogger(XirsysSessionHandler::class.ja
 @Singleton
 class XirsysSessionHandler(
     xirsysProperties: XirsysProperties,
+    private val fafProperties: FafProperties,
     private val xirsysApiAdapter: XirsysApiAdapter,
 ) : SessionHandler {
     companion object {
@@ -42,7 +44,7 @@ class XirsysSessionHandler(
     override fun getIceServersSession(sessionId: String): List<Session.Server> =
         xirsysApiAdapter.requestIceServers(
             channelName = sessionId,
-            turnRequest = TurnRequest(),
+            turnRequest = TurnRequest(expire = fafProperties.tokenLifetimeSeconds()),
         ).iceServers.let {
             listOf(
                 Session.Server(
