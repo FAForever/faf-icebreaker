@@ -11,7 +11,6 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.time.Instant
 import java.time.temporal.ChronoUnit
-import java.util.concurrent.TimeoutException
 
 private val LOG: Logger = LoggerFactory.getLogger(SessionService::class.java)
 
@@ -27,36 +26,27 @@ class SessionService(
 
     @Transactional
     fun getSession(gameId: Long): Session {
+        val session: IceSessionEntity
         try {
-            when (iceSessionRepository.acquireGameLock(gameId)) {
-                true -> {
-                    val session = iceSessionRepository.findByGameId(gameId)
-                        ?: IceSessionEntity(gameId = gameId, createdAt = Instant.now()).also {
-                            LOG.debug("Creating session for gameId $gameId")
-                            iceSessionRepository.persist(it)
-                        }
-
-                    val servers = activeSessionHandlers.flatMap {
-                        it.createSession(session.id)
-                        it.getIceServersSession(session.id)
-                    }
-
-                    return Session(
-                        id = session.id,
-                        servers = servers,
-                    )
+            iceSessionRepository.acquireGameLock(gameId)
+            session = iceSessionRepository.findByGameId(gameId)
+                ?: IceSessionEntity(gameId = gameId, createdAt = Instant.now()).also {
+                    LOG.debug("Creating session for gameId $gameId")
+                    iceSessionRepository.persist(it)
                 }
-                else -> {
-                    throw TimeoutException("Unable to acquire game lock for $gameId")
-                }
-            }
         } finally {
-            when (iceSessionRepository.releaseGameLock(gameId)) {
-                null -> LOG.warn("No lock exists for $gameId")
-                false -> LOG.warn("Failed to release lock for $gameId")
-                true -> LOG.debug("lock released for $gameId")
-            }
+            iceSessionRepository.releaseGameLock(gameId)
         }
+
+        val servers = activeSessionHandlers.flatMap {
+            it.createSession(session.id)
+            it.getIceServersSession(session.id)
+        }
+
+        return Session(
+            id = session.id,
+            servers = servers,
+        )
     }
 
     @Transactional

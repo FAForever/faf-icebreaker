@@ -6,8 +6,10 @@ import jakarta.inject.Singleton
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
+import org.slf4j.LoggerFactory
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.TimeoutException
 
 @Entity
 @Table(name = "ice_sessions")
@@ -23,20 +25,39 @@ data class IceSessionEntity(
 
 @Singleton
 class IceSessionRepository : PanacheRepository<IceSessionEntity> {
+
+    companion object {
+        val LOG = LoggerFactory.getLogger(IceSessionRepository::class.java)
+    }
+
     fun findByGameId(gameId: Long) =
         find("gameId = ?1", gameId).firstResult()
 
     fun findByCreatedAtLesserThan(instant: Instant) =
         find("createdAt <= ?1", instant).list()
 
-    fun acquireGameLock(gameId: Long, timeout: Int = 10) =
-        getEntityManager().createNativeQuery("SELECT GET_LOCK(:lockName,:timeout)", Boolean::class.java).apply {
+    fun acquireGameLock(gameId: Long, timeout: Int = 10) {
+        val lockAcquired = getEntityManager().createNativeQuery("SELECT GET_LOCK(:lockName,:timeout)", Boolean::class.java).apply {
             setParameter("lockName", "game_id_$gameId")
             setParameter("timeout", timeout)
         }.singleResult as Boolean?
 
-    fun releaseGameLock(gameId: Long) =
-        getEntityManager().createNativeQuery("SELECT RELEASE_LOCK(:lockName)", Boolean::class.java).apply {
+        if (lockAcquired != true) {
+            throw TimeoutException("Unable to acquire game lock for $gameId")
+        }
+    }
+
+    fun releaseGameLock(gameId: Long) {
+        val lockReleased = getEntityManager().createNativeQuery("SELECT RELEASE_LOCK(:lockName)", Boolean::class.java).apply {
             setParameter("lockName", "game_id_$gameId")
         }.singleResult as Boolean?
+
+        when (lockReleased) {
+            null -> LOG.warn("No lock exists for $gameId")
+            false -> LOG.warn("Not owner of lock for $gameId")
+            true -> LOG.debug("lock released for $gameId")
+        }
+    }
+
 }
+
