@@ -1,7 +1,6 @@
 package com.faforever.icebreaker.service
 
 import com.faforever.icebreaker.config.FafProperties
-import com.faforever.icebreaker.persistence.IceSessionEntity
 import com.faforever.icebreaker.persistence.IceSessionRepository
 import io.quarkus.scheduler.Scheduled
 import jakarta.enterprise.inject.Instance
@@ -37,15 +36,15 @@ class SessionService(
 //                    iceSessionRepository.persist(it)
 //                }
 
-            val servers = activeSessionHandlers.flatMap {
-                it.createSession(sessionId)
-                it.getIceServersSession(sessionId)
-            }
+        val servers = activeSessionHandlers.flatMap {
+            it.createSession(sessionId)
+            it.getIceServersSession(sessionId)
+        }
 
-            return Session(
-                id = sessionId,
-                servers = servers,
-            )
+        return Session(
+            id = sessionId,
+            servers = servers,
+        )
 //        } finally {
 //            iceSessionRepository.releaseGameLock(gameId)
 //        }
