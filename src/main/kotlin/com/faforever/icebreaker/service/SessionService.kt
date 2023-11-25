@@ -11,6 +11,7 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.time.Instant
 import java.time.temporal.ChronoUnit
+import java.util.UUID
 
 private val LOG: Logger = LoggerFactory.getLogger(SessionService::class.java)
 
@@ -20,33 +21,34 @@ class SessionService(
     private val fafProperties: FafProperties,
     private val iceSessionRepository: IceSessionRepository,
 ) {
+    private val sessionId = UUID.randomUUID().toString()
     private val activeSessionHandlers = sessionHandlers.filter { it.active }
 
     fun getServers(): List<Server> = activeSessionHandlers.flatMap { it.getIceServers() }
 
     @Transactional
     fun getSession(gameId: Long): Session {
-        try {
-            iceSessionRepository.acquireGameLock(gameId)
+//        try {
+//            iceSessionRepository.acquireGameLock(gameId)
 
-            val session = iceSessionRepository.findByGameId(gameId)
-                ?: IceSessionEntity(gameId = gameId, createdAt = Instant.now()).also {
-                    LOG.debug("Creating session for gameId $gameId")
-                    iceSessionRepository.persist(it)
-                }
+//            val session = iceSessionRepository.findByGameId(gameId)
+//                ?: IceSessionEntity(gameId = gameId, createdAt = Instant.now()).also {
+//                    LOG.debug("Creating session for gameId $gameId")
+//                    iceSessionRepository.persist(it)
+//                }
 
             val servers = activeSessionHandlers.flatMap {
-                it.createSession(session.id)
-                it.getIceServersSession(session.id)
+                it.createSession(sessionId)
+                it.getIceServersSession(sessionId)
             }
 
             return Session(
-                id = session.id,
+                id = sessionId,
                 servers = servers,
             )
-        } finally {
-            iceSessionRepository.releaseGameLock(gameId)
-        }
+//        } finally {
+//            iceSessionRepository.releaseGameLock(gameId)
+//        }
     }
 
     @Transactional
