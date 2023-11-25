@@ -80,6 +80,8 @@ class XirsysApiAdapter(
 
                 is XirsysResponse.Success -> result.data
             }
+        } catch (e: XirsysSpecifiedApiException) {
+            throw e
         } catch (e: IOException) {
             throw XirsysUnspecifiedApiException(errorResponse = response, cause = e)
         }
