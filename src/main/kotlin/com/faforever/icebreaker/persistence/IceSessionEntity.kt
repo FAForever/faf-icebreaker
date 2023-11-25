@@ -58,6 +58,4 @@ class IceSessionRepository : PanacheRepository<IceSessionEntity> {
             true -> LOG.debug("lock released for $gameId")
         }
     }
-
 }
-
