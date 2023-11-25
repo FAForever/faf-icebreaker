@@ -6,6 +6,8 @@ import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.annotation.JsonSubTypes
 import com.fasterxml.jackson.annotation.JsonTypeInfo
 
+const val NOT_FOUND = "not_found"
+
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "s")
 @JsonSubTypes(
     JsonSubTypes.Type(value = XirsysResponse.Success::class, name = "ok"),
