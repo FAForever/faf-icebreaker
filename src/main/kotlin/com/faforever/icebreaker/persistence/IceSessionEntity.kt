@@ -23,12 +23,10 @@ data class IceSessionEntity(
 
 ) : PanacheEntityBase
 
+private val LOG = LoggerFactory.getLogger(IceSessionRepository::class.java)
+
 @Singleton
 class IceSessionRepository : PanacheRepository<IceSessionEntity> {
-
-    companion object {
-        val LOG = LoggerFactory.getLogger(IceSessionRepository::class.java)
-    }
 
     fun findByGameId(gameId: Long) =
         find("gameId = ?1", gameId).firstResult()
@@ -55,7 +53,7 @@ class IceSessionRepository : PanacheRepository<IceSessionEntity> {
         when (lockReleased) {
             null -> LOG.warn("No lock exists for $gameId")
             false -> LOG.warn("Not owner of lock for $gameId")
-            true -> LOG.debug("lock released for $gameId")
+            true -> LOG.debug("Lock released for $gameId")
         }
     }
 }
