@@ -6,8 +6,10 @@ import jakarta.inject.Singleton
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
+import org.slf4j.LoggerFactory
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.TimeoutException
 
 @Entity
 @Table(name = "ice_sessions")
@@ -21,8 +23,11 @@ data class IceSessionEntity(
 
 ) : PanacheEntityBase
 
+private val LOG = LoggerFactory.getLogger(IceSessionRepository::class.java)
+
 @Singleton
 class IceSessionRepository : PanacheRepository<IceSessionEntity> {
+
     fun findByGameId(gameId: Long) =
         find("gameId = ?1", gameId).firstResult()
 
@@ -30,15 +35,25 @@ class IceSessionRepository : PanacheRepository<IceSessionEntity> {
         find("createdAt <= ?1", instant).list()
 
     fun acquireGameLock(gameId: Long, timeout: Int = 10) {
-        getEntityManager().createNativeQuery("SELECT GET_LOCK(:lockName,:timeout)", Boolean::class.java).apply {
+        val lockAcquired = getEntityManager().createNativeQuery("SELECT GET_LOCK(:lockName,:timeout)", Boolean::class.java).apply {
             setParameter("lockName", "game_id_$gameId")
             setParameter("timeout", timeout)
-        }.singleResult
+        }.singleResult as Boolean?
+
+        if (lockAcquired != true) {
+            throw TimeoutException("Unable to acquire game lock for $gameId")
+        }
     }
 
     fun releaseGameLock(gameId: Long) {
-        getEntityManager().createNativeQuery("SELECT RELEASE_LOCK(:lockName)", Boolean::class.java).apply {
+        val lockReleased = getEntityManager().createNativeQuery("SELECT RELEASE_LOCK(:lockName)", Boolean::class.java).apply {
             setParameter("lockName", "game_id_$gameId")
-        }.singleResult
+        }.singleResult as Boolean?
+
+        when (lockReleased) {
+            null -> LOG.warn("No lock exists for $gameId")
+            false -> LOG.warn("Not owner of lock for $gameId")
+            true -> LOG.debug("Lock released for $gameId")
+        }
     }
 }
