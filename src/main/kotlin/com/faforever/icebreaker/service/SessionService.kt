@@ -24,27 +24,30 @@ class SessionService(
 
     fun getServers(): List<Server> = activeSessionHandlers.flatMap { it.getIceServers() }
 
-    @Transactional
-    fun getSession(gameId: Long): Session {
-        val session: IceSessionEntity
-        try {
-            iceSessionRepository.acquireGameLock(gameId)
-            session = iceSessionRepository.findByGameId(gameId)
-                ?: IceSessionEntity(gameId = gameId, createdAt = Instant.now()).also {
-                    LOG.debug("Creating session for gameId $gameId")
-                    iceSessionRepository.persist(it)
-                }
-        } finally {
-            iceSessionRepository.releaseGameLock(gameId)
-        }
+    fun lockGameId(gameId: Long, timeout: Int = 10): AutoCloseable {
+        iceSessionRepository.acquireGameLock(gameId, timeout)
+        return AutoCloseable { iceSessionRepository.releaseGameLock(gameId) }
+    }
 
+    @Transactional
+    fun getSessionId(gameId: Long): String {
+        val session: IceSessionEntity = iceSessionRepository.findByGameId(gameId)
+            ?: IceSessionEntity(gameId = gameId, createdAt = Instant.now()).also {
+                LOG.debug("Creating session for gameId $gameId")
+                iceSessionRepository.persist(it)
+            }
+
+        return session.id
+    }
+
+    fun getSession(sessionId: String): Session {
         val servers = activeSessionHandlers.flatMap {
-            it.createSession(session.id)
-            it.getIceServersSession(session.id)
+            it.createSession(sessionId)
+            it.getIceServersSession(sessionId)
         }
 
         return Session(
-            id = session.id,
+            id = sessionId,
             servers = servers,
         )
     }

@@ -33,8 +33,10 @@ xirsys:
   channel-namespace: "faf"
 
 "%dev":
-   quarkus:
-     log:
-       category:
-         "org.hibernate.SQL":
-           level: DEBUG
+  quarkus:
+    log:
+      category:
+        "org.hibernate.SQL":
+          level: DEBUG
+        "com.faforever":
+          level: DEBUG

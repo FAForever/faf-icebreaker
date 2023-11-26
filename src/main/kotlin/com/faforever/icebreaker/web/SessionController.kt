@@ -17,15 +17,20 @@ class SessionController(private val sessionService: SessionService) {
     @Produces(MediaType.APPLICATION_JSON)
     @Path("/game/{gameId}")
     @PermissionsAllowed("USER:lobby")
-    fun getSession(@RestPath gameId: Long): Session =
-        sessionService.getSession(gameId)
+    fun getSession(@RestPath gameId: Long): Session {
+        val sessionId: String
+        sessionService.lockGameId(gameId).use {
+            sessionId = sessionService.getSessionId(gameId)
+        }
+        return sessionService.getSession(sessionId)
+    }
 
     @GET
     @Produces(MEDIA_TYPE_JSON_API)
     @Path("/game/{gameId}")
     @PermissionsAllowed("USER:lobby")
     fun getSessionJsonApi(@RestPath gameId: Long): JsonApiResponse =
-        sessionService.getSession(gameId).let {
+        getSession(gameId).let {
             JsonApiResponse.fromObject(
                 JsonApiObject(
                     type = "iceSession",
