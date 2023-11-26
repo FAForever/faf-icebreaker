@@ -28,6 +28,9 @@ private val LOG = LoggerFactory.getLogger(IceSessionRepository::class.java)
 @Singleton
 class IceSessionRepository : PanacheRepository<IceSessionEntity> {
 
+    fun existsByGameId(gameId: Long) =
+        count("gameId = ?1", gameId) != 0L
+
     fun findByGameId(gameId: Long) =
         find("gameId = ?1", gameId).firstResult()
 
