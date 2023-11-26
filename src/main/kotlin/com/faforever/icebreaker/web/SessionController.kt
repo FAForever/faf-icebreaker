@@ -25,7 +25,7 @@ class SessionController(private val sessionService: SessionService) {
     @Path("/game/{gameId}")
     @PermissionsAllowed("USER:lobby")
     fun getSessionJsonApi(@RestPath gameId: Long): JsonApiResponse =
-        sessionService.getSession(gameId).let {
+        getSession(gameId).let {
             JsonApiResponse.fromObject(
                 JsonApiObject(
                     type = "iceSession",

@@ -3,6 +3,7 @@ package com.faforever.icebreaker.service
 import com.faforever.icebreaker.config.FafProperties
 import com.faforever.icebreaker.persistence.IceSessionEntity
 import com.faforever.icebreaker.persistence.IceSessionRepository
+import com.faforever.icebreaker.util.AsyncRunner
 import io.quarkus.scheduler.Scheduled
 import jakarta.enterprise.inject.Instance
 import jakarta.inject.Singleton
@@ -24,29 +25,40 @@ class SessionService(
 
     fun getServers(): List<Server> = activeSessionHandlers.flatMap { it.getIceServers() }
 
-    @Transactional
     fun getSession(gameId: Long): Session {
-        val session: IceSessionEntity
-        try {
-            iceSessionRepository.acquireGameLock(gameId)
-            session = iceSessionRepository.findByGameId(gameId)
-                ?: IceSessionEntity(gameId = gameId, createdAt = Instant.now()).also {
-                    LOG.debug("Creating session for gameId $gameId")
-                    iceSessionRepository.persist(it)
-                }
-        } finally {
-            iceSessionRepository.releaseGameLock(gameId)
-        }
+        val sessionId = "game/$gameId"
 
         val servers = activeSessionHandlers.flatMap {
-            it.createSession(session.id)
-            it.getIceServersSession(session.id)
+            it.createSession(sessionId)
+            it.getIceServersSession(sessionId)
+        }
+
+        AsyncRunner.runLater {
+            persistSessionDetailsIfNecessary(gameId, sessionId)
         }
 
         return Session(
-            id = session.id,
+            id = gameId.toString(),
             servers = servers,
         )
+    }
+
+    @Transactional
+    fun persistSessionDetailsIfNecessary(gameId: Long, sessionId: String) {
+        if (!iceSessionRepository.existsByGameId(gameId)) {
+            try {
+                LOG.debug("Creating session for gameId $gameId")
+                iceSessionRepository.persist(
+                    IceSessionEntity(
+                        id = sessionId,
+                        gameId = gameId,
+                        createdAt = Instant.now(),
+                    ),
+                )
+            } catch (e: Exception) {
+                LOG.warn("Unable to persist session details for game id $gameId and session id $sessionId")
+            }
+        }
     }
 
     @Transactional
