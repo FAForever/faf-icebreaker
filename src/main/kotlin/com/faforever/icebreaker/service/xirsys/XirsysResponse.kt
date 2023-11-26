@@ -7,6 +7,7 @@ import com.fasterxml.jackson.annotation.JsonSubTypes
 import com.fasterxml.jackson.annotation.JsonTypeInfo
 
 const val NOT_FOUND = "not_found"
+const val PATH_EXISTS = "path_exists"
 
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "s")
 @JsonSubTypes(

@@ -42,14 +42,20 @@ class XirsysApiAdapter(
         }
 
     @Retry
-    fun createChannel(channelName: String): Map<String, String> =
-        parseAndUnwrap {
-            xirsysApiClient.createChannel(
-                namespace = xirsysProperties.channelNamespace(),
-                environment = fafProperties.environment(),
-                channelName = channelName,
-            )
+    fun createChannel(channelName: String) {
+        try {
+            parseAndUnwrap<Map<String, String>> {
+                xirsysApiClient.createChannel(
+                    namespace = xirsysProperties.channelNamespace(),
+                    environment = fafProperties.environment(),
+                    channelName = channelName,
+                )
+            }
+        } catch (e: XirsysSpecifiedApiException) {
+            if (!e.errorCode.equals(PATH_EXISTS, true)) throw e
+            LOG.debug("Channel $channelName already exists")
         }
+    }
 
     @Retry
     fun deleteChannel(channelName: String) {

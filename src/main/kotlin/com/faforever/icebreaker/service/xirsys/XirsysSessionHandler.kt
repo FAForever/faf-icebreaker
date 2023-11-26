@@ -23,21 +23,13 @@ class XirsysSessionHandler(
     override val active = xirsysProperties.enabled()
 
     override fun createSession(id: String) {
-        if (listSessions().contains(id)) {
-            LOG.debug("Session id $id already exists")
-            return
-        }
-
         LOG.debug("Creating session id $id")
-
         xirsysApiAdapter.createChannel(id)
     }
 
     override fun deleteSession(id: String) {
         xirsysApiAdapter.deleteChannel(channelName = id)
     }
-
-    private fun listSessions(): List<String> = xirsysApiAdapter.listChannel()
 
     override fun getIceServers() = listOf(Server(id = SERVER_NAME, region = "Global"))
 
