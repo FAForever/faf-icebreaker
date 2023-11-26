@@ -52,7 +52,7 @@ class XirsysApiAdapter(
                 )
             }
         } catch (e: XirsysSpecifiedApiException) {
-            if (!e.errorCode.equals(PATH_EXISTS, true)) throw e
+            if (e.errorCode != PATH_EXISTS) throw e
             LOG.debug("Channel $channelName already exists")
         }
     }
