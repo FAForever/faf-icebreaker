@@ -38,3 +38,5 @@ xirsys:
        category:
          "org.hibernate.SQL":
            level: DEBUG
+         "com.faforever":
+           level: DEBUG
