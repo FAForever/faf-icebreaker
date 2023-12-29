@@ -30,6 +30,9 @@ quarkus:
   http:
     auth:
       permission:
+        healthcheck:
+          paths: "/q/health"
+          policy: permit
         authenticated:
           paths: "/*"
           policy: authenticated
