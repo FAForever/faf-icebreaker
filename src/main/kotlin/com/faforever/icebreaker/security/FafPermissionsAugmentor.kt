@@ -6,6 +6,7 @@ import io.quarkus.security.identity.SecurityIdentityAugmentor
 import io.quarkus.security.runtime.QuarkusSecurityIdentity
 import io.smallrye.mutiny.Uni
 import jakarta.enterprise.context.ApplicationScoped
+import jakarta.json.JsonNumber
 import jakarta.json.JsonString
 import org.eclipse.microprofile.jwt.JsonWebToken
 
@@ -24,7 +25,7 @@ class FafPermissionsAugmentor : SecurityIdentityAugmentor {
             when (val principal = identity.principal) {
                 is JsonWebToken -> {
                     val roles = principal.claim<Map<String, Any>>("ext")
-                        .map { it["roles"] as List<JsonString> }
+                        .map<List<JsonString>> { it["roles"] as? List<JsonString> }
                         .map { it.map { jsonString -> jsonString.string } }
                         .map { it.toSet() }
                         .orElse(setOf())
@@ -32,6 +33,12 @@ class FafPermissionsAugmentor : SecurityIdentityAugmentor {
                     val scopes = principal.claim<List<JsonString>>("scp")
                         .map { it.map { jsonString -> jsonString.string }.toSet() }
                         .orElse(setOf())
+
+                    principal.claim<Map<String, Any>>("ext")
+                        .map<JsonNumber> { it["gameId"] as? JsonNumber }
+                        .ifPresent {
+                            builder.addAttribute("gameId", it.longValue())
+                        }
 
                     builder.addPermissionChecker { requiredPermission ->
                         val hasRole = roles.contains(requiredPermission.name)

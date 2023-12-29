@@ -5,9 +5,14 @@ import com.faforever.icebreaker.persistence.IceSessionEntity
 import com.faforever.icebreaker.persistence.IceSessionRepository
 import com.faforever.icebreaker.util.AsyncRunner
 import io.quarkus.scheduler.Scheduled
+import io.quarkus.security.ForbiddenException
+import io.quarkus.security.UnauthorizedException
+import io.quarkus.security.identity.SecurityIdentity
+import io.smallrye.jwt.build.Jwt
 import jakarta.enterprise.inject.Instance
 import jakarta.inject.Singleton
 import jakarta.transaction.Transactional
+import org.eclipse.microprofile.jwt.JsonWebToken
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.time.Instant
@@ -20,12 +25,45 @@ class SessionService(
     sessionHandlers: Instance<SessionHandler>,
     private val fafProperties: FafProperties,
     private val iceSessionRepository: IceSessionRepository,
+    private val securityIdentity: SecurityIdentity,
 ) {
     private val activeSessionHandlers = sessionHandlers.filter { it.active }
 
+    fun buildToken(gameId: Long): String {
+        val userId = when (val principal = securityIdentity?.principal) {
+            null -> throw UnauthorizedException("No principal available")
+            is JsonWebToken -> principal.subject.toInt()
+            else -> throw IllegalStateException("Unexpected principal type: ${principal.javaClass} ($principal)")
+        }
+
+        return Jwt.subject(userId.toString())
+            .claim(
+                "ext",
+                mapOf(
+                    "roles" to listOf("USER"),
+                    "gameId" to gameId,
+                ),
+            )
+            .claim("scp", listOf("lobby"))
+            .issuer(fafProperties.selfUrl())
+            .audience(fafProperties.selfUrl())
+            .expiresAt(Instant.now().plus(fafProperties.maxSessionLifeTimeHours(), ChronoUnit.HOURS))
+            .sign()
+    }
+
+    @Deprecated(
+        message = "Only remaining for java-ice-adapter compatibility",
+        replaceWith = ReplaceWith("getSession"),
+    )
     fun getServers(): List<Server> = activeSessionHandlers.flatMap { it.getIceServers() }
 
     fun getSession(gameId: Long): Session {
+        // For compatibility reasons right now we only check on mismatch because general FAF JWT are still allowed
+        // but have no implicit gameId attached
+        securityIdentity.attributes["gameId"]?.takeIf { it != gameId }?.run {
+            throw ForbiddenException("Not authorized to join game $gameId")
+        }
+
         val sessionId = "game/$gameId"
 
         val servers = activeSessionHandlers.flatMap {
