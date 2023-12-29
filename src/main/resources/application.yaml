@@ -13,15 +13,29 @@ quarkus:
     physical-naming-strategy: org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy
   flyway:
     migrate-at-start: true
-mp:
-  jwt:
-    verify:
-      issuer: ${HYDRA_TOKEN_ISSUER:http://faf-ory-hydra:4444/}
-      key-format: JWKS
-      publickey:
-        location: ${HYDRA_JWKS_URL:http://localhost:4444/.well-known/jwks.json}
+  oidc:
+    auth-server-url: ${HYDRA_URL:http://localhost:4444}
+    # A tenant for our self-signed JWTs
+    # (also requires the CustomTenantResolver)
+    self-tenant:
+      # There is no .well-known/openid-configuration
+      auth-server-url: ${SELF_URL:https://ice.faforever.com}
+      discovery-enabled: false
+      token:
+        # Hard coded JWT settings, as there is no JWKS
+        signature-algorithm: ${JWT_ALGORITHM:RS256}
+        # No Quarkus, there is really no JWKS! Stop looking for it.
+        forced-jwk-refresh-interval: 0S
+      public-key: ${JWT_PUBLIC_KEY_PATH}
+  http:
+    auth:
+      permission:
+        authenticated:
+          paths: "/*"
+          policy: authenticated
 
 faf:
+  self-url: ${SELF_URL:https://ice.faforever.com}
   environment: ${ENVIRONMENT:dev}
   token-lifetime-seconds: 86400 # 24h because of lobbies/games/reconnects can happen for a long time
   max-session-life-time-hours: 24
@@ -31,12 +45,63 @@ xirsys:
   ident: ${XIRSYS_IDENT}
   secret: ${XIRSYS_SECRET}
   channel-namespace: "faf"
-
+smallrye:
+  jwt:
+    sign:
+      key: ${JWT_PRIVATE_KEY_PATH}
 "%dev":
-   quarkus:
-     log:
-       category:
-         "org.hibernate.SQL":
+  smallrye:
+    jwt:
+      sign:
+        # Just a random private key for testing
+        key: |-
+          -----BEGIN PRIVATE KEY-----
+          MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDXsCsl9W0vnW2k
+          5GaNOVoZ6LPFYu60Y1Cd4ERRXvt8KzKTm2HHZeLKd77OLeIHR4RvJ2Q76SFwfDBM
+          35F5eEx1mjPua2ljxbObsgz/bA9yBwO1RugpNOe+GoGUhPyZvmmZwqRnnQsT/SHV
+          ZvRq7ej6k+KkJf09IIOxfWrGUj8SajW3iEpkuKdNpjp1dRnJdZAZ8mV1LgnwHCAf
+          osL3t3+PElBSxnRQNW9iYVwB9wQAWK+aivx5warhuCeyKVtDaR0x96bOUTaKL4i/
+          Uihn0CElGt5ZA907wHa6/N4Z8ssXjY+/vizYB2VYxuAG/MVkkbwWUUTGjzEEX6Ww
+          h5icvVm1AgMBAAECggEAAZYYGyVc8ja0MbxETNGZKgueFtuNaeI5G5AksHyEWPtw
+          WcmQxIipTFfpHVcVDHyoKrEdeZtTVaJ0MHyMc1pBJbRGoYBEvCkeEw0SL2a6Dlqi
+          2lh1KKhs8+b6AP+hY/gUir71upVbGYCJGSqyrX6mcgFYb2CgJizxCwMjH+ZG9Hm0
+          CkGeh4g0VDOWmx4uCChXSyoaPzD4yTJts/EOpSD61KqS+cNcnRD8PVUxwwSH+4DY
+          ZSuaAUC/kFvD4qQq2lY/eia2CQi2R1Ff2TCxcbNZ34yW8IR1UBdrOPo3orQK5vSf
+          iT5++MYJmTZJ8/QxY5M1nZqiyJEjTvaBQNGv8abKWQKBgQDxd/5lJkc13x8jPFJm
+          EnmPvxrJaYk3MLW3dtxz1HtjHDQAvCmjXy7Ss13WhLJv9nHJDtQlSRr+l+7eNPTP
+          QtiwDsqv9COfbPbvH2qcNJuNoINQ2YSKYvR0j+QlMz2dHroWEyXL4oyOfXAJ3ZrU
+          lyWn/a2BD3uiJAj4p8YzJgfgnwKBgQDkqwGC6AMLPbVmhCMnUd+cxFMkYymdi8R4
+          ZXMkjJiMLAOt8tkp8T0nqxC/zMfD0jnPKw1R9MP7XlM/tonLeAM/P8GUMwJnTCTc
+          PvP1JxkvMG3do+7y9AbLyJsNZDkbYj1wLzvZYUrXQV/HKU4balDj3QVI6yr+W6ha
+          idlsMDYBKwKBgBeuF9GdlmAvGGOhN8dwymERcbQM2HsEGN38FxR44vzOOD9WNJMj
+          83iQRISUENewCGqaPK3HZJFRHwjFkrh8qrlhSflFbPTmf7TllNPqyNJzykz0d+4G
+          VEjWD56iTsmIyOD/UbaT6grTPFiLVfLBO90koI5GkW5OMF8KPQKpGR6rAoGAU5NQ
+          1RiZbDVcpKBs/MUG1pRG0wjPP/7Ci0KBB/2/D5RSr/QPfS3nrSTv1ToyVRbz/Az/
+          LFIqgyghgyrjSBOQFEDoLpNKMJj66+iyX4qvwLiRny14eyHHjhm+2fEkkiagz+zj
+          kfrmULBbIj6thoWgFPhGIzWYnCjB6n1xkwI36ssCgYACiZNHvqld4Om2IChCjIV6
+          UPNLUDOvr7V1qsEy+y0dp2RQH9Es121n/v30GYfsUUYmH35CQYR0aOEqU17Qm2V7
+          1auC1ZD9UeE9dy2LpW635uYf16D5FejAcmxyf/MRSBBnvFauGdS2vZ7Pf05u9Zpw
+          i8UgZE7+lTYKv7+4ujmgHw==
+          -----END PRIVATE KEY-----
+  quarkus:
+    oidc:
+     self-tenant:
+       public-key: |-
+         -----BEGIN PUBLIC KEY-----
+         MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA17ArJfVtL51tpORmjTla
+         GeizxWLutGNQneBEUV77fCsyk5thx2Xiyne+zi3iB0eEbydkO+khcHwwTN+ReXhM
+         dZoz7mtpY8Wzm7IM/2wPcgcDtUboKTTnvhqBlIT8mb5pmcKkZ50LE/0h1Wb0au3o
+         +pPipCX9PSCDsX1qxlI/Emo1t4hKZLinTaY6dXUZyXWQGfJldS4J8BwgH6LC97d/
+         jxJQUsZ0UDVvYmFcAfcEAFivmor8ecGq4bgnsilbQ2kdMfemzlE2ii+Iv1IoZ9Ah
+         JRreWQPdO8B2uvzeGfLLF42Pv74s2AdlWMbgBvzFZJG8FlFExo8xBF+lsIeYnL1Z
+         tQIDAQAB
+         -----END PUBLIC KEY-----
+    log:
+      level: DEBUG
+      category:
+        "org.hibernate.SQL":
+          level: DEBUG
+        "com.faforever":
            level: DEBUG
-         "com.faforever":
+        "io.quarkus":
            level: DEBUG
