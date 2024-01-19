@@ -52,6 +52,30 @@ smallrye:
   jwt:
     sign:
       key: ${JWT_PRIVATE_KEY_PATH}
+mp:
+  messaging:
+    incoming:
+      events-in:
+        connector: smallrye-rabbitmq
+        virtual-host: ${RABBITMQ_VHOST:/faf-core}
+        queue:
+          name: events.${HOSTNAME:local}
+          auto-delete: true
+          exclusive: true
+        exchange:
+          name: ice
+    outgoing:
+      events-out:
+        connector: smallrye-rabbitmq
+        virtual-host: ${RABBITMQ_VHOST:/faf-core}
+        exchange:
+          name: ice
+
+rabbitmq-host: ${RABBITMQ_HOST:localhost}
+rabbitmq-port: ${RABBITMQ_PORT:5672}
+rabbitmq-username: ${RABBITMQ_USER:admin}
+rabbitmq-password: ${RABBITMQ_PASSWORD:banana}
+
 "%dev":
   smallrye:
     jwt:
