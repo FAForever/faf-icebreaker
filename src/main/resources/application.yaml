@@ -19,6 +19,7 @@ quarkus:
     # (also requires the CustomTenantResolver)
     self-tenant:
       # There is no .well-known/openid-configuration
+      auth-server-url: ${SELF_URL:https://ice.faforever.com}
       discovery-enabled: false
       token:
         # Hard coded JWT settings, as there is no JWKS
