@@ -19,7 +19,6 @@ quarkus:
     # (also requires the CustomTenantResolver)
     self-tenant:
       # There is no .well-known/openid-configuration
-      auth-server-url: ${SELF_URL:https://ice.faforever.com}
       discovery-enabled: false
       token:
         # Hard coded JWT settings, as there is no JWKS
@@ -61,6 +60,30 @@ smallrye:
   jwt:
     sign:
       key: ${JWT_PRIVATE_KEY_PATH}
+mp:
+  messaging:
+    incoming:
+      events-in:
+        connector: smallrye-rabbitmq
+        virtual-host: ${RABBITMQ_VHOST:/faf-core}
+        queue:
+          name: events.${HOSTNAME:local}
+          auto-delete: true
+          exclusive: true
+        exchange:
+          name: ice
+    outgoing:
+      events-out:
+        connector: smallrye-rabbitmq
+        virtual-host: ${RABBITMQ_VHOST:/faf-core}
+        exchange:
+          name: ice
+
+rabbitmq-host: ${RABBITMQ_HOST:localhost}
+rabbitmq-port: ${RABBITMQ_PORT:5672}
+rabbitmq-username: ${RABBITMQ_USER:faf-icebreaker}
+rabbitmq-password: ${RABBITMQ_PASSWORD:banana}
+
 "%dev":
   xirsys:
     enabled: ${XIRSYS_ENABLED:false}
