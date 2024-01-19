@@ -1,9 +1,12 @@
 package com.faforever.icebreaker.web
 
+import com.faforever.icebreaker.service.CandidatesMessage
+import com.faforever.icebreaker.service.EventMessage
 import com.faforever.icebreaker.service.Session
 import com.faforever.icebreaker.service.SessionService
 import io.quarkus.runtime.annotations.RegisterForReflection
 import io.quarkus.security.PermissionsAllowed
+import io.smallrye.mutiny.Multi
 import jakarta.inject.Singleton
 import jakarta.ws.rs.Consumes
 import jakarta.ws.rs.GET
@@ -12,6 +15,7 @@ import jakarta.ws.rs.Path
 import jakarta.ws.rs.Produces
 import jakarta.ws.rs.core.MediaType
 import org.jboss.resteasy.reactive.RestPath
+import org.jboss.resteasy.reactive.RestStreamElementType
 
 @Path("/session")
 @Singleton
@@ -61,4 +65,18 @@ class SessionController(
                 ),
             )
         }
+
+    @POST
+    @Path("/game/{gameId}/events")
+    @PermissionsAllowed("USER:lobby")
+    @Consumes(MediaType.APPLICATION_JSON)
+    fun postEvent(@RestPath gameId: Long, candidatesMessage: CandidatesMessage) {
+        sessionService.onCandidatesReceived(gameId, candidatesMessage)
+    }
+
+    @GET
+    @Path("/game/{gameId}/events")
+    @PermissionsAllowed("USER:lobby")
+    @RestStreamElementType(MediaType.APPLICATION_JSON)
+    fun getSessionEvents(@RestPath gameId: Long): Multi<EventMessage> = sessionService.listenForEventMessages(gameId)
 }
