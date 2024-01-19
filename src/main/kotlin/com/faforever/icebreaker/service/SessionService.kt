@@ -3,12 +3,15 @@ package com.faforever.icebreaker.service
 import com.faforever.icebreaker.config.FafProperties
 import com.faforever.icebreaker.persistence.IceSessionEntity
 import com.faforever.icebreaker.persistence.IceSessionRepository
+import com.faforever.icebreaker.security.CurrentUserService
 import com.faforever.icebreaker.util.AsyncRunner
 import io.quarkus.scheduler.Scheduled
 import io.quarkus.security.ForbiddenException
 import io.quarkus.security.UnauthorizedException
 import io.quarkus.security.identity.SecurityIdentity
 import io.smallrye.jwt.build.Jwt
+import io.smallrye.mutiny.Multi
+import io.smallrye.mutiny.helpers.MultiEmitterProcessor
 import jakarta.enterprise.inject.Instance
 import jakarta.inject.Singleton
 import jakarta.transaction.Transactional
@@ -26,8 +29,11 @@ class SessionService(
     private val fafProperties: FafProperties,
     private val iceSessionRepository: IceSessionRepository,
     private val securityIdentity: SecurityIdentity,
+    private val currentUserService: CurrentUserService,
 ) {
     private val activeSessionHandlers = sessionHandlers.filter { it.active }
+    private val eventEmitter = MultiEmitterProcessor.create<EventMessage>()
+    private val eventBroadcast: Multi<EventMessage> = eventEmitter.toMulti().broadcast().toAllSubscribers()
 
     fun buildToken(gameId: Long): String {
         val userId = when (val principal = securityIdentity?.principal) {
@@ -110,5 +116,28 @@ class SessionService(
             activeSessionHandlers.forEach { it.deleteSession(iceSession.id) }
             iceSessionRepository.delete(iceSession)
         }
+    }
+
+    fun listenForEventMessages(gameId: Long): Multi<EventMessage> {
+        val userId = currentUserService.getCurrentUserId()
+        eventEmitter.emit(ConnectedMessage(gameId = gameId, senderId = currentUserService.getCurrentUserId()!!))
+
+        return eventBroadcast.filter {
+            it.gameId == gameId && (it.recipientId == userId || (it.recipientId == null && it.senderId != userId))
+        }
+    }
+
+    fun onCandidatesReceived(gameId: Long, candidatesMessage: CandidatesMessage) {
+        // Check messages for manipulation. We need to prevent cross-channel vulnerabilities.
+        check(candidatesMessage.gameId == gameId) {
+            "gameId $gameId from endpoint does not match gameId ${candidatesMessage.gameId} in candidateMessage"
+        }
+
+        val currentUserId = currentUserService.getCurrentUserId()
+        check(candidatesMessage.senderId == currentUserService.getCurrentUserId()) {
+            "current user id $currentUserId from endpoint does not match sourceId ${candidatesMessage.senderId} in candidateMessage"
+        }
+
+        eventEmitter.emit(candidatesMessage)
     }
 }

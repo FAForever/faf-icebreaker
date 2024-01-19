@@ -100,11 +100,11 @@ smallrye:
          tQIDAQAB
          -----END PUBLIC KEY-----
     log:
-      level: DEBUG
+      level: INFO
       category:
         "org.hibernate.SQL":
           level: DEBUG
         "com.faforever":
            level: DEBUG
         "io.quarkus":
-           level: DEBUG
+           level: INFO
