@@ -21,6 +21,7 @@ class XirsysSessionHandler(
     }
 
     override val active = xirsysProperties.enabled()
+    private val turnEnabled = xirsysProperties.turnEnabled()
 
     override fun createSession(id: String) {
         LOG.debug("Creating session id $id")
@@ -48,7 +49,7 @@ class XirsysSessionHandler(
                         // The java URI class fails to read host and port due to the missing // after the :
                         // Thus we "normalize" the uri, even though it is technically valid
                         url.replaceFirst(":", "://")
-                    },
+                    }.filter { url -> turnEnabled || !url.startsWith("turn") },
                 ),
             )
         }

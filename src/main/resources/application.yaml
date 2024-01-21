@@ -48,6 +48,7 @@ xirsys:
   ident: ${XIRSYS_IDENT}
   secret: ${XIRSYS_SECRET}
   channel-namespace: "faf"
+  turn-enabled: ${XIRSYS_TURN_ENABLED:true}
 smallrye:
   jwt:
     sign:
