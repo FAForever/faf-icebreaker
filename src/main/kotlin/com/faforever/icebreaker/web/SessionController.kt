@@ -18,33 +18,40 @@ import org.jboss.resteasy.reactive.RestPath
 class SessionController(
     private val sessionService: SessionService,
 ) {
+    @RegisterForReflection
+    data class TokenRequest(
+        val gameId: Long,
+    )
 
     @RegisterForReflection
-    data class TokenRequest(val gameId: Long)
-
-    @RegisterForReflection
-    data class TokenResponse(val jwt: String)
+    data class TokenResponse(
+        val jwt: String,
+    )
 
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     @Path("/token")
     fun buildToken(tokenRequest: TokenRequest): TokenResponse =
-        sessionService.buildToken(tokenRequest.gameId)
+        sessionService
+            .buildToken(tokenRequest.gameId)
             .let { TokenResponse(it) }
 
     @GET
     @Produces(MediaType.APPLICATION_JSON)
     @Path("/game/{gameId}")
     @PermissionsAllowed("USER:lobby")
-    fun getSession(@RestPath gameId: Long): Session =
-        sessionService.getSession(gameId)
+    fun getSession(
+        @RestPath gameId: Long,
+    ): Session = sessionService.getSession(gameId)
 
     @GET
     @Produces(MEDIA_TYPE_JSON_API)
     @Path("/game/{gameId}")
     @PermissionsAllowed("USER:lobby")
-    fun getSessionJsonApi(@RestPath gameId: Long): JsonApiResponse =
+    fun getSessionJsonApi(
+        @RestPath gameId: Long,
+    ): JsonApiResponse =
         getSession(gameId).let {
             JsonApiResponse.fromObject(
                 JsonApiObject(

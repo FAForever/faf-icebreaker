@@ -15,19 +15,12 @@ data class CoturnServerEntity(
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long,
-
     val region: String,
-
     val host: String,
-
     val port: Int,
-
     val presharedKey: String,
-
     val contactEmail: String,
-
     val active: Boolean,
-
 ) : PanacheEntityBase
 
 @Singleton

@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     val kotlinVersion = "2.0.0"
 
@@ -47,8 +49,6 @@ group = "com.faforever.icebreaker"
 version = "1.0.0-SNAPSHOT"
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
 }
 
 tasks.withType<Test> {
@@ -61,12 +61,9 @@ allOpen {
 }
 
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
-        javaParameters = true
-
-        // For creation of default methods in interfaces
-        freeCompilerArgs = listOf("-Xjvm-default=all")
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_21)
+        javaParameters.set(true)
     }
 }
 
@@ -96,7 +93,7 @@ noArg {
 }
 
 spotless {
-    val ktlintVersion = "0.49.1"
+    val ktlintVersion = "1.3.0"
     kotlin {
         ktlint(ktlintVersion)
     }

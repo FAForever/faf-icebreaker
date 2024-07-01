@@ -12,29 +12,35 @@ import org.eclipse.microprofile.jwt.JsonWebToken
 
 @ApplicationScoped
 class FafPermissionsAugmentor : SecurityIdentityAugmentor {
-    override fun augment(identity: SecurityIdentity, context: AuthenticationRequestContext): Uni<SecurityIdentity> {
-        return Uni.createFrom().item(build(identity))
-    }
+    override fun augment(
+        identity: SecurityIdentity,
+        context: AuthenticationRequestContext,
+    ): Uni<SecurityIdentity> = Uni.createFrom().item(build(identity))
 
     @Suppress("UNCHECKED_CAST")
-    private fun build(identity: SecurityIdentity): SecurityIdentity {
-        return if (identity.isAnonymous) {
+    private fun build(identity: SecurityIdentity): SecurityIdentity =
+        if (identity.isAnonymous) {
             identity
         } else {
             val builder = QuarkusSecurityIdentity.builder(identity)
             when (val principal = identity.principal) {
                 is JsonWebToken -> {
-                    val roles = principal.claim<Map<String, Any>>("ext")
-                        .map<List<JsonString>> { it["roles"] as? List<JsonString> }
-                        .map { it.map { jsonString -> jsonString.string } }
-                        .map { it.toSet() }
-                        .orElse(setOf())
+                    val roles =
+                        principal
+                            .claim<Map<String, Any>>("ext")
+                            .map<List<JsonString>> { it["roles"] as? List<JsonString> }
+                            .map { it.map { jsonString -> jsonString.string } }
+                            .map { it.toSet() }
+                            .orElse(setOf())
 
-                    val scopes = principal.claim<List<JsonString>>("scp")
-                        .map { it.map { jsonString -> jsonString.string }.toSet() }
-                        .orElse(setOf())
+                    val scopes =
+                        principal
+                            .claim<List<JsonString>>("scp")
+                            .map { it.map { jsonString -> jsonString.string }.toSet() }
+                            .orElse(setOf())
 
-                    principal.claim<Map<String, Any>>("ext")
+                    principal
+                        .claim<Map<String, Any>>("ext")
                         .map<JsonNumber> { it["gameId"] as? JsonNumber }
                         .ifPresent {
                             builder.addAttribute("gameId", it.longValue())
@@ -49,5 +55,4 @@ class FafPermissionsAugmentor : SecurityIdentityAugmentor {
             }
             builder.build()
         }
-    }
 }

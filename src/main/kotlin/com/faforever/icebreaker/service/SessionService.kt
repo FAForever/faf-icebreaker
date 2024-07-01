@@ -30,21 +30,22 @@ class SessionService(
     private val activeSessionHandlers = sessionHandlers.filter { it.active }
 
     fun buildToken(gameId: Long): String {
-        val userId = when (val principal = securityIdentity?.principal) {
-            null -> throw UnauthorizedException("No principal available")
-            is JsonWebToken -> principal.subject.toInt()
-            else -> throw IllegalStateException("Unexpected principal type: ${principal.javaClass} ($principal)")
-        }
+        val userId =
+            when (val principal = securityIdentity?.principal) {
+                null -> throw UnauthorizedException("No principal available")
+                is JsonWebToken -> principal.subject.toInt()
+                else -> throw IllegalStateException("Unexpected principal type: ${principal.javaClass} ($principal)")
+            }
 
-        return Jwt.subject(userId.toString())
+        return Jwt
+            .subject(userId.toString())
             .claim(
                 "ext",
                 mapOf(
                     "roles" to listOf("USER"),
                     "gameId" to gameId,
                 ),
-            )
-            .claim("scp", listOf("lobby"))
+            ).claim("scp", listOf("lobby"))
             .issuer(fafProperties.selfUrl())
             .audience(fafProperties.selfUrl())
             .expiresAt(Instant.now().plus(fafProperties.maxSessionLifeTimeHours(), ChronoUnit.HOURS))
@@ -66,10 +67,11 @@ class SessionService(
 
         val sessionId = "game/$gameId"
 
-        val servers = activeSessionHandlers.flatMap {
-            it.createSession(sessionId)
-            it.getIceServersSession(sessionId)
-        }
+        val servers =
+            activeSessionHandlers.flatMap {
+                it.createSession(sessionId)
+                it.getIceServersSession(sessionId)
+            }
 
         AsyncRunner.runLater {
             persistSessionDetailsIfNecessary(gameId, sessionId)
@@ -82,7 +84,10 @@ class SessionService(
     }
 
     @Transactional
-    fun persistSessionDetailsIfNecessary(gameId: Long, sessionId: String) {
+    fun persistSessionDetailsIfNecessary(
+        gameId: Long,
+        sessionId: String,
+    ) {
         if (!iceSessionRepository.existsByGameId(gameId)) {
             try {
                 LOG.debug("Creating session for gameId $gameId")
@@ -103,12 +108,13 @@ class SessionService(
     @Scheduled(every = "10m")
     fun cleanUpSessions() {
         LOG.info("Cleaning up outdated sessions")
-        iceSessionRepository.findByCreatedAtLesserThan(
-            instant = Instant.now().plus(fafProperties.maxSessionLifeTimeHours(), ChronoUnit.HOURS),
-        ).forEach { iceSession ->
-            LOG.debug("Cleaning up session id ${iceSession.id}")
-            activeSessionHandlers.forEach { it.deleteSession(iceSession.id) }
-            iceSessionRepository.delete(iceSession)
-        }
+        iceSessionRepository
+            .findByCreatedAtLesserThan(
+                instant = Instant.now().plus(fafProperties.maxSessionLifeTimeHours(), ChronoUnit.HOURS),
+            ).forEach { iceSession ->
+                LOG.debug("Cleaning up session id ${iceSession.id}")
+                activeSessionHandlers.forEach { it.deleteSession(iceSession.id) }
+                iceSessionRepository.delete(iceSession)
+            }
     }
 }

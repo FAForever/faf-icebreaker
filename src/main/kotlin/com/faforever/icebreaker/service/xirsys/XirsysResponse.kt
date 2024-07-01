@@ -15,8 +15,13 @@ const val PATH_EXISTS = "path_exists"
     JsonSubTypes.Type(value = XirsysResponse.Error::class, name = "error"),
 )
 sealed interface XirsysResponse<T : Any> {
-    data class Success<T : Any> (@JsonProperty("v") val data: T) : XirsysResponse<T>
-    data class Error<T : Any>(@JsonProperty("v") val code: String) : XirsysResponse<T>
+    data class Success<T : Any>(
+        @JsonProperty("v") val data: T,
+    ) : XirsysResponse<T>
+
+    data class Error<T : Any>(
+        @JsonProperty("v") val code: String,
+    ) : XirsysResponse<T>
 }
 
 @JsonInclude(JsonInclude.Include.NON_NULL)

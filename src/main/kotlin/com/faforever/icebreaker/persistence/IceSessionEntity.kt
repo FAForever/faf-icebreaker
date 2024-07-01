@@ -16,32 +16,31 @@ import java.util.concurrent.TimeoutException
 data class IceSessionEntity(
     @Id
     val id: String = UUID.randomUUID().toString(),
-
     val gameId: Long,
-
     val createdAt: Instant,
-
 ) : PanacheEntityBase
 
 private val LOG = LoggerFactory.getLogger(IceSessionRepository::class.java)
 
 @Singleton
 class IceSessionRepository : PanacheRepository<IceSessionEntity> {
+    fun existsByGameId(gameId: Long) = count("gameId = ?1", gameId) != 0L
 
-    fun existsByGameId(gameId: Long) =
-        count("gameId = ?1", gameId) != 0L
+    fun findByGameId(gameId: Long) = find("gameId = ?1", gameId).firstResult()
 
-    fun findByGameId(gameId: Long) =
-        find("gameId = ?1", gameId).firstResult()
+    fun findByCreatedAtLesserThan(instant: Instant) = find("createdAt <= ?1", instant).list()
 
-    fun findByCreatedAtLesserThan(instant: Instant) =
-        find("createdAt <= ?1", instant).list()
-
-    fun acquireGameLock(gameId: Long, timeout: Int = 10) {
-        val lockAcquired = getEntityManager().createNativeQuery("SELECT GET_LOCK(:lockName,:timeout)", Boolean::class.java).apply {
-            setParameter("lockName", "game_id_$gameId")
-            setParameter("timeout", timeout)
-        }.singleResult as Boolean?
+    fun acquireGameLock(
+        gameId: Long,
+        timeout: Int = 10,
+    ) {
+        val lockAcquired =
+            getEntityManager()
+                .createNativeQuery("SELECT GET_LOCK(:lockName,:timeout)", Boolean::class.java)
+                .apply {
+                    setParameter("lockName", "game_id_$gameId")
+                    setParameter("timeout", timeout)
+                }.singleResult as Boolean?
 
         if (lockAcquired != true) {
             throw TimeoutException("Unable to acquire game lock for $gameId")
@@ -49,9 +48,12 @@ class IceSessionRepository : PanacheRepository<IceSessionEntity> {
     }
 
     fun releaseGameLock(gameId: Long) {
-        val lockReleased = getEntityManager().createNativeQuery("SELECT RELEASE_LOCK(:lockName)", Boolean::class.java).apply {
-            setParameter("lockName", "game_id_$gameId")
-        }.singleResult as Boolean?
+        val lockReleased =
+            getEntityManager()
+                .createNativeQuery("SELECT RELEASE_LOCK(:lockName)", Boolean::class.java)
+                .apply {
+                    setParameter("lockName", "game_id_$gameId")
+                }.singleResult as Boolean?
 
         when (lockReleased) {
             null -> LOG.warn("No lock exists for $gameId")

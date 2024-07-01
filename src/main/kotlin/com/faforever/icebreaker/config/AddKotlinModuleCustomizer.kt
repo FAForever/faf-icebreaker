@@ -7,7 +7,6 @@ import jakarta.inject.Singleton
 
 @Singleton
 class AddKotlinModuleCustomizer : ObjectMapperCustomizer {
-
     override fun customize(objectMapper: ObjectMapper) {
         objectMapper.registerModule(KotlinModule.Builder().build())
     }

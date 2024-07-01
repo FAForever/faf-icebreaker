@@ -19,18 +19,19 @@ class XirsysResponseTest {
 
     @Test
     fun parseSuccess() {
-        val result: XirsysResponse.Success<List<String>> = objectMapper.readValue(
-            """
-            {
-             "v":[
-                "my",
-                "my/channel",
-                "my/channel/path"
-              ],
-             "s": "ok"
-            }
-            """.trimIndent(),
-        )
+        val result: XirsysResponse.Success<List<String>> =
+            objectMapper.readValue(
+                """
+                {
+                 "v":[
+                    "my",
+                    "my/channel",
+                    "my/channel/path"
+                  ],
+                 "s": "ok"
+                }
+                """.trimIndent(),
+            )
         assertEquals(listOf("my", "my/channel", "my/channel/path"), result.data)
     }
 }

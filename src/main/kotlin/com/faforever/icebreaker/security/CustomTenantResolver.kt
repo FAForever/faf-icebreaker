@@ -20,17 +20,20 @@ class CustomTenantResolver(
     private val fafProperties: FafProperties,
     private val objectMapper: ObjectMapper,
 ) : TenantResolver {
-
     override fun resolve(context: RoutingContext): String? =
-        context.request().getHeader(AUTHORIZATION)
+        context
+            .request()
+            .getHeader(AUTHORIZATION)
             ?.takeIf { it.startsWith("Bearer ") }
             ?.let {
                 val rawToken = it.substring(7)
-                val body = java.util.Base64.getDecoder().decode(rawToken.split(".")[1])
+                val body =
+                    java.util.Base64
+                        .getDecoder()
+                        .decode(rawToken.split(".")[1])
                 val json = objectMapper.readTree(body)
 
                 json["iss"]?.textValue()
-            }
-            ?.takeIf { it == fafProperties.selfUrl() }
+            }?.takeIf { it == fafProperties.selfUrl() }
             ?.let { "self-tenant" }
 }

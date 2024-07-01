@@ -22,15 +22,16 @@ class XirsysApiAdapter(
     private val xirsysProperties: XirsysProperties,
     private val objectMapper: ObjectMapper,
 ) {
-    private val xirsysApiClient: XirsysApiClient = RestClientBuilder.newBuilder()
-        .baseUri(URI.create(xirsysProperties.baseUrl()))
-        .register(
-            BasicAuthenticationRequestFilter(
-                username = xirsysProperties.ident(),
-                password = xirsysProperties.secret(),
-            ),
-        )
-        .build(XirsysApiClient::class.java)
+    private val xirsysApiClient: XirsysApiClient =
+        RestClientBuilder
+            .newBuilder()
+            .baseUri(URI.create(xirsysProperties.baseUrl()))
+            .register(
+                BasicAuthenticationRequestFilter(
+                    username = xirsysProperties.ident(),
+                    password = xirsysProperties.secret(),
+                ),
+            ).build(XirsysApiClient::class.java)
 
     @Retry
     fun listChannel(): List<String> =
@@ -75,7 +76,10 @@ class XirsysApiAdapter(
     }
 
     @Retry
-    fun requestIceServers(channelName: String, turnRequest: TurnRequest = TurnRequest()): TurnResponse =
+    fun requestIceServers(
+        channelName: String,
+        turnRequest: TurnRequest = TurnRequest(),
+    ): TurnResponse =
         parseAndUnwrap {
             xirsysApiClient.requestIceServers(
                 namespace = xirsysProperties.channelNamespace(),

@@ -26,11 +26,11 @@ class CoturnSessionHandler(
         // Coturn has no session handling, we use global access
     }
 
-    override fun getIceServers() =
-        coturnServerRepository.findActive().map { Server(id = it.host, region = it.region) }
+    override fun getIceServers() = coturnServerRepository.findActive().map { Server(id = it.host, region = it.region) }
 
     override fun getIceServersSession(sessionId: String): List<Session.Server> =
-        coturnServerRepository.findActive()
+        coturnServerRepository
+            .findActive()
             .map {
                 val (tokenName, tokenSecret) = buildHmac(sessionId, it.presharedKey)
                 Session.Server(
@@ -41,7 +41,10 @@ class CoturnSessionHandler(
                 )
             }
 
-    private fun buildHmac(sessionName: String, presharedKey: String): Pair<String, String> {
+    private fun buildHmac(
+        sessionName: String,
+        presharedKey: String,
+    ): Pair<String, String> {
         val timestamp = System.currentTimeMillis() / 1000 + fafProperties.tokenLifetimeSeconds()
         val tokenName = "$timestamp:$sessionName"
 
@@ -49,14 +52,18 @@ class CoturnSessionHandler(
         val mac = Mac.getInstance("HmacSHA1")
         mac.init(secretKeySpec)
 
-        val tokenSecret = mac.doFinal(tokenName.encodeToByteArray()).let {
-            Base64.getEncoder().encodeToString(it)
-        }
+        val tokenSecret =
+            mac.doFinal(tokenName.encodeToByteArray()).let {
+                Base64.getEncoder().encodeToString(it)
+            }
 
         return tokenName to tokenSecret
     }
 
-    private fun buildUrls(hostName: String, port: Int) = listOf(
+    private fun buildUrls(
+        hostName: String,
+        port: Int,
+    ) = listOf(
         "stun://$hostName:$port",
         "turn://$hostName:$port?transport=udp",
         "turn://$hostName:$port?transport=tcp",
