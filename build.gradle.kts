@@ -41,6 +41,7 @@ dependencies {
     implementation("io.quarkus:quarkus-resteasy-reactive")
     implementation("io.quarkus:quarkus-flyway")
     implementation("org.flywaydb:flyway-mysql")
+    implementation("com.maxmind.geoip2:geoip2:4.1.0")
     testImplementation("io.quarkus:quarkus-junit5")
     testImplementation("io.rest-assured:rest-assured")
 }

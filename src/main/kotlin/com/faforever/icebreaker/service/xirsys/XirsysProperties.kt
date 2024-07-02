@@ -15,4 +15,6 @@ interface XirsysProperties {
     fun secret(): String
 
     fun channelNamespace(): String
+
+    fun geoIpPath(): String
 }

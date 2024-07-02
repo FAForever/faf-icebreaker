@@ -1,14 +1,18 @@
 package com.faforever.icebreaker.service.xirsys
 
 import com.faforever.icebreaker.config.FafProperties
+import com.faforever.icebreaker.service.xirsys.geolocation.RegionSelectorService
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
+import io.vertx.core.http.HttpServerRequest
 import jakarta.inject.Singleton
+import jakarta.ws.rs.core.Context
 import org.eclipse.microprofile.faulttolerance.Retry
 import org.eclipse.microprofile.rest.client.RestClientBuilder
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.io.IOException
+import java.net.InetAddress
 import java.net.URI
 
 private val LOG: Logger = LoggerFactory.getLogger(XirsysApiAdapter::class.java)
@@ -20,7 +24,9 @@ private val LOG: Logger = LoggerFactory.getLogger(XirsysApiAdapter::class.java)
 class XirsysApiAdapter(
     private val fafProperties: FafProperties,
     private val xirsysProperties: XirsysProperties,
+    private val regionSelectorService: RegionSelectorService,
     private val objectMapper: ObjectMapper,
+    @Context private val httpRequest: HttpServerRequest,
 ) {
     private val xirsysApiClient: XirsysApiClient =
         RestClientBuilder
@@ -34,13 +40,12 @@ class XirsysApiAdapter(
             ).build(XirsysApiClient::class.java)
 
     @Retry
-    fun listChannel(): List<String> =
-        parseAndUnwrap {
-            xirsysApiClient.listChannel(
-                namespace = xirsysProperties.channelNamespace(),
-                environment = fafProperties.environment(),
-            )
-        }
+    fun listChannel(): List<String> = parseAndUnwrap {
+        xirsysApiClient.listChannel(
+            namespace = xirsysProperties.channelNamespace(),
+            environment = fafProperties.environment(),
+        )
+    }
 
     @Retry
     fun createChannel(channelName: String) {
@@ -79,13 +84,26 @@ class XirsysApiAdapter(
     fun requestIceServers(
         channelName: String,
         turnRequest: TurnRequest = TurnRequest(),
-    ): TurnResponse =
-        parseAndUnwrap {
-            xirsysApiClient.requestIceServers(
-                namespace = xirsysProperties.channelNamespace(),
-                environment = fafProperties.environment(),
-                channelName = channelName,
-                turnRequest = turnRequest,
+    ): TurnResponse = parseAndUnwrap<TurnResponse> {
+        xirsysApiClient.requestIceServers(
+            namespace = xirsysProperties.channelNamespace(),
+            environment = fafProperties.environment(),
+            channelName = channelName,
+            turnRequest = turnRequest,
+        )
+    }.withUserLocationServers()
+
+    private fun TurnResponse.withUserLocationServers(): TurnResponse =
+        regionSelectorService.getClosestRegion(httpRequest.getIp()).let { region ->
+            copy(
+                iceServers = iceServers.copy(
+                    urls = iceServers.urls.map {
+                        it.replace(
+                            regex = Regex("(.+:)([\\w-]+.xirsys.com)(.*)"),
+                            replacement = "$1${region.domain}$3",
+                        )
+                    },
+                ),
             )
         }
 
@@ -107,4 +125,7 @@ class XirsysApiAdapter(
             throw XirsysUnspecifiedApiException(errorResponse = response, cause = e)
         }
     }
+
+    private fun HttpServerRequest.getIp() =
+        InetAddress.getByName(getHeader(fafProperties.realIpHeader()) ?: remoteAddress().host())
 }
