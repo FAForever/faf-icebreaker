@@ -34,27 +34,22 @@ class XirsysSessionHandler(
 
     override fun getIceServers() = listOf(Server(id = SERVER_NAME, region = "Global"))
 
-    override fun getIceServersSession(sessionId: String): List<Session.Server> =
-        xirsysApiAdapter
-            .requestIceServers(
-                channelName = sessionId,
-                turnRequest = TurnRequest(expire = fafProperties.tokenLifetimeSeconds()),
-            ).iceServers
-            .let {
-                listOf(
-                    Session.Server(
-                        id = SERVER_NAME,
-                        username = it.username,
-                        credential = it.credential,
-                        urls =
-                            it.urls
-                                .map { url ->
-                                    // A sample response looks like "stun:fr-turn1.xirsys.com"
-                                    // The java URI class fails to read host and port due to the missing // after the :
-                                    // Thus we "normalize" the uri, even though it is technically valid
-                                    url.replaceFirst(":", "://")
-                                }.filter { url -> turnEnabled || !url.startsWith("turn") },
-                    ),
-                )
-            }
+    override fun getIceServersSession(sessionId: String): List<Session.Server> = xirsysApiAdapter.requestIceServers(
+        channelName = sessionId,
+        turnRequest = TurnRequest(expire = fafProperties.tokenLifetimeSeconds()),
+    ).iceServers.let {
+        listOf(
+            Session.Server(
+                id = SERVER_NAME,
+                username = it.username,
+                credential = it.credential,
+                urls = it.urls.map { url ->
+                    // A sample response looks like "stun:fr-turn1.xirsys.com"
+                    // The java URI class fails to read host and port due to the missing // after the :
+                    // Thus we "normalize" the uri, even though it is technically valid
+                    url.replaceFirst(":", "://")
+                }.filter { url -> turnEnabled || !url.startsWith("turn") },
+            ),
+        )
+    }
 }

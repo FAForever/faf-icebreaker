@@ -2,9 +2,9 @@
 
 The FAF ICE server broker that returns access to TURN and STUN servers both static (self-hosted coturn) and dynamically (Xirsys). 
 
-This project uses Quarkus, the Supersonic Subatomic Java Framework.
+The available environment variables for configuration can be found in `src/main/resources/application.yaml`. Variables are declared like `${ENV_VARIABLE_NAME:fallback-value}`.
 
-If you want to learn more about Quarkus, please visit its website: https://quarkus.io/ .
+This application makes use of the [GeoLite2](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data) database to search for the closest Xirsys server according to the users ip address. The file must be present on startup or all requests will fall back to Frankfurt, Germany.
 
 ## Running the application in dev mode
 
