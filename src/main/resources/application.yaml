@@ -50,7 +50,7 @@ xirsys:
   secret: ${XIRSYS_SECRET}
   channel-namespace: "faf"
   turn-enabled: ${XIRSYS_TURN_ENABLED:true}
-  geo-ip-path: ${GEO_IP_DATABASE_PATH:"/geoip/GeoLite2-City.mmdb"}
+  geo-ip-path: ${GEO_IP_DATABASE_PATH:/geoip/GeoLite2-City.mmdb}
 smallrye:
   jwt:
     sign:
