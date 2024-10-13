@@ -2,6 +2,7 @@ package com.faforever.icebreaker.service.xirsys
 
 import com.faforever.icebreaker.config.FafProperties
 import com.faforever.icebreaker.service.xirsys.geolocation.RegionSelectorService
+import com.faforever.icebreaker.service.xirsys.geolocation.XirsysRegion
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import io.vertx.core.http.HttpServerRequest
@@ -28,20 +29,26 @@ class XirsysApiAdapter(
     private val objectMapper: ObjectMapper,
     @Context private val httpRequest: HttpServerRequest,
 ) {
-    private val xirsysApiClient: XirsysApiClient =
-        RestClientBuilder
-            .newBuilder()
-            .baseUri(URI.create(xirsysProperties.baseUrl()))
-            .register(
-                BasicAuthenticationRequestFilter(
-                    username = xirsysProperties.ident(),
-                    password = xirsysProperties.secret(),
-                ),
-            ).build(XirsysApiClient::class.java)
+    private val globalXirsysApiClient: XirsysApiClient = buildXirsysApiClient(xirsysProperties.baseUrl())
+
+    private val apiClientByRegion = mutableMapOf<XirsysRegion, XirsysApiClient>()
+
+    private fun buildXirsysApiClient(baseUrl: String) = RestClientBuilder
+        .newBuilder()
+        .baseUri(URI.create(baseUrl))
+        .register(
+            BasicAuthenticationRequestFilter(
+                username = xirsysProperties.ident(),
+                password = xirsysProperties.secret(),
+            ),
+        ).build(XirsysApiClient::class.java)
+
+    private fun getApiClientForRegion(region: XirsysRegion): XirsysApiClient =
+        apiClientByRegion.getOrPut(region) { buildXirsysApiClient(region.apiUrl) }
 
     @Retry
     fun listChannel(): List<String> = parseAndUnwrap {
-        xirsysApiClient.listChannel(
+        globalXirsysApiClient.listChannel(
             namespace = xirsysProperties.channelNamespace(),
             environment = fafProperties.environment(),
         )
@@ -51,7 +58,7 @@ class XirsysApiAdapter(
     fun createChannel(channelName: String) {
         try {
             parseAndUnwrap<Map<String, String>> {
-                xirsysApiClient.createChannel(
+                globalXirsysApiClient.createChannel(
                     namespace = xirsysProperties.channelNamespace(),
                     environment = fafProperties.environment(),
                     channelName = channelName,
@@ -67,7 +74,7 @@ class XirsysApiAdapter(
     fun deleteChannel(channelName: String) {
         try {
             parseAndUnwrap<Int> {
-                xirsysApiClient.deleteChannel(
+                globalXirsysApiClient.deleteChannel(
                     namespace = xirsysProperties.channelNamespace(),
                     environment = fafProperties.environment(),
                     channelName = channelName,
@@ -85,27 +92,14 @@ class XirsysApiAdapter(
         channelName: String,
         turnRequest: TurnRequest = TurnRequest(),
     ): TurnResponse = parseAndUnwrap<TurnResponse> {
-        xirsysApiClient.requestIceServers(
+        val region = regionSelectorService.getClosestRegion(httpRequest.getIp())
+        getApiClientForRegion(region).requestIceServers(
             namespace = xirsysProperties.channelNamespace(),
             environment = fafProperties.environment(),
             channelName = channelName,
             turnRequest = turnRequest,
         )
-    }.withUserLocationServers()
-
-    private fun TurnResponse.withUserLocationServers(): TurnResponse =
-        regionSelectorService.getClosestRegion(httpRequest.getIp()).let { region ->
-            copy(
-                iceServers = iceServers.copy(
-                    urls = iceServers.urls.map {
-                        it.replace(
-                            regex = Regex("(.+:)([\\w-]+.xirsys.com)(.*)"),
-                            replacement = "$1${region.domain}$3",
-                        )
-                    },
-                ),
-            )
-        }
+    }
 
     @Throws(IOException::class)
     private inline fun <reified T : Any> parseAndUnwrap(getResponse: () -> String): T {
