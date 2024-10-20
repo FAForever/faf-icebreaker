@@ -6,6 +6,7 @@ import jakarta.inject.Singleton
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
+import jakarta.transaction.Transactional
 import org.slf4j.LoggerFactory
 import java.time.Instant
 import java.util.UUID
@@ -23,6 +24,7 @@ data class IceSessionEntity(
 private val LOG = LoggerFactory.getLogger(IceSessionRepository::class.java)
 
 @Singleton
+@Transactional
 class IceSessionRepository : PanacheRepository<IceSessionEntity> {
     fun existsByGameId(gameId: Long) = count("gameId = ?1", gameId) != 0L
 

@@ -104,7 +104,6 @@ class SessionService(
         }
     }
 
-    @Transactional
     @Scheduled(every = "10m")
     fun cleanUpSessions() {
         LOG.info("Cleaning up outdated sessions")
