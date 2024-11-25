@@ -1,0 +1,10 @@
+services:
+  mariadb:
+    image: mariadb:11
+    environment:
+      MARIADB_ROOT_PASSWORD: banana
+      MARIADB_DATABASE: faf-icebreaker
+      MARIADB_USER: faf-icebreaker
+      MARIADB_PASSWORD: banana
+    ports:
+      - "3306:3306"
