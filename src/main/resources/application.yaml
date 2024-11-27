@@ -51,6 +51,11 @@ xirsys:
   channel-namespace: "faf"
   turn-enabled: ${XIRSYS_TURN_ENABLED:true}
   geo-ip-path: ${GEO_IP_DATABASE_PATH:/geoip/GeoLite2-City.mmdb}
+cloudflare:
+  enabled: ${CLOUDFLARE_ENABLED:true}
+  turn-enabled: ${CLOUDFLARE_TURN_ENABLED:true}
+  turn-key-id: ${CLOUDFLARE_TURN_KEY_ID:undefined}
+  turn-key-api-token: ${CLOUDFLARE_TURN_KEY_API_KEY:undefined}
 smallrye:
   jwt:
     sign:
@@ -58,6 +63,8 @@ smallrye:
 "%dev":
   xirsys:
     enabled: ${XIRSYS_ENABLED:false}
+  cloudflare:
+    enabled: ${CLOUDFLARE_ENABLED:false}
   smallrye:
     jwt:
       sign:
