@@ -5,18 +5,28 @@ import com.faforever.icebreaker.persistence.CoturnServerRepository
 import com.faforever.icebreaker.service.Server
 import com.faforever.icebreaker.service.Session
 import com.faforever.icebreaker.service.SessionHandler
-import jakarta.inject.Singleton
+import jakarta.annotation.PostConstruct
+import jakarta.enterprise.context.ApplicationScoped
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import java.util.Base64
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
-@Singleton
+private val LOG: Logger = LoggerFactory.getLogger(CoturnSessionHandler::class.java)
+
+@ApplicationScoped
 class CoturnSessionHandler(
     val fafProperties: FafProperties,
     val coturnServerRepository: CoturnServerRepository,
 ) : SessionHandler {
     // if you don't want to use it, leave the SQL table empty
     override val active = true
+
+    @PostConstruct
+    fun init() {
+        LOG.info("CoturnSessionHandler active: $active")
+    }
 
     override fun createSession(id: String) {
         // Coturn has no session handling, we use global access

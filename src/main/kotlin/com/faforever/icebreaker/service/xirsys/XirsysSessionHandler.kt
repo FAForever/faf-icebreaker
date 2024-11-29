@@ -4,13 +4,14 @@ import com.faforever.icebreaker.config.FafProperties
 import com.faforever.icebreaker.service.Server
 import com.faforever.icebreaker.service.Session
 import com.faforever.icebreaker.service.SessionHandler
-import jakarta.inject.Singleton
+import jakarta.annotation.PostConstruct
+import jakarta.enterprise.context.ApplicationScoped
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
 private val LOG: Logger = LoggerFactory.getLogger(XirsysSessionHandler::class.java)
 
-@Singleton
+@ApplicationScoped
 class XirsysSessionHandler(
     xirsysProperties: XirsysProperties,
     private val fafProperties: FafProperties,
@@ -22,6 +23,11 @@ class XirsysSessionHandler(
 
     override val active = xirsysProperties.enabled()
     private val turnEnabled = xirsysProperties.turnEnabled()
+
+    @PostConstruct
+    fun init() {
+        LOG.info("XirsysSessionHandler active: $active, turnEnabled: $turnEnabled")
+    }
 
     override fun createSession(id: String) {
         LOG.debug("Creating session id $id")
