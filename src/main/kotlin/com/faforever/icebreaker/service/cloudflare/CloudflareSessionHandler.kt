@@ -4,9 +4,14 @@ import com.faforever.icebreaker.config.FafProperties
 import com.faforever.icebreaker.service.Server
 import com.faforever.icebreaker.service.Session
 import com.faforever.icebreaker.service.SessionHandler
-import jakarta.inject.Singleton
+import jakarta.annotation.PostConstruct
+import jakarta.enterprise.context.ApplicationScoped
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 
-@Singleton
+private val LOG: Logger = LoggerFactory.getLogger(CloudflareSessionHandler::class.java)
+
+@ApplicationScoped
 class CloudflareSessionHandler(
     cloudflareProperties: CloudflareProperties,
     val fafProperties: FafProperties,
@@ -18,6 +23,11 @@ class CloudflareSessionHandler(
 
     override val active = cloudflareProperties.enabled()
     private val turnEnabled = cloudflareProperties.turnEnabled()
+
+    @PostConstruct
+    fun init() {
+        LOG.info("CloudflareSessionHandler active: $active, turnEnabled: $turnEnabled")
+    }
 
     override fun createSession(id: String) {
         // Cloudflare has no session handling, we use global access
