@@ -31,7 +31,10 @@ class CloudflareSessionHandler(
 
     override fun getIceServersSession(sessionId: String): List<Session.Server> =
         cloudflareApiAdapter.requestIceServers(
-            credentialRequest = CloudflareApiClient.CredentialRequest(ttl = fafProperties.tokenLifetimeSeconds()),
+            credentialRequest = CloudflareApiClient.CredentialRequest(
+                ttl = fafProperties.tokenLifetimeSeconds(),
+                customIdentifier = sessionId,
+            ),
         ).let {
             listOf(
                 Session.Server(

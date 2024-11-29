@@ -13,7 +13,7 @@ import org.eclipse.microprofile.rest.client.inject.RegisterRestClient
 @Consumes(MediaType.APPLICATION_JSON)
 interface CloudflareApiClient {
 
-    data class CredentialRequest(val ttl: Long)
+    data class CredentialRequest(val ttl: Long, val customIdentifier: String?)
     data class CredentialResponse(val iceServers: IceServers) {
         data class IceServers(val urls: List<String>, val username: String, val credential: String)
     }
