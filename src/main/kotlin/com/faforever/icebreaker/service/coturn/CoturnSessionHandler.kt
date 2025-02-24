@@ -1,6 +1,7 @@
 package com.faforever.icebreaker.service.coturn
 
 import com.faforever.icebreaker.config.FafProperties
+import com.faforever.icebreaker.persistence.CoturnServerEntity
 import com.faforever.icebreaker.persistence.CoturnServerRepository
 import com.faforever.icebreaker.security.getUserId
 import com.faforever.icebreaker.service.Server
@@ -50,7 +51,7 @@ class CoturnSessionHandler(
                     id = it.host,
                     username = tokenName,
                     credential = tokenSecret,
-                    urls = buildUrls(hostName = it.host, port = it.port),
+                    urls = buildUrls(coturnServer = it),
                 )
             }
 
@@ -75,11 +76,26 @@ class CoturnSessionHandler(
     }
 
     private fun buildUrls(
-        hostName: String,
-        port: Int,
-    ) = listOf(
-        "stun://$hostName:$port",
-        "turn://$hostName:$port?transport=udp",
-        "turn://$hostName:$port?transport=tcp",
-    )
+        coturnServer: CoturnServerEntity,
+    ): List<String> {
+        val result = mutableListOf<String>()
+
+        if (coturnServer.stunPort != null) {
+            result.add("stun://${coturnServer.host}:${coturnServer.stunPort}")
+        }
+
+        if (coturnServer.turnUdpPort != null) {
+            result.add("turn://${coturnServer.host}:${coturnServer.turnUdpPort}?transport=udp")
+        }
+
+        if (coturnServer.turnTcpPort != null) {
+            result.add("turn://${coturnServer.host}:${coturnServer.turnTcpPort}?transport=tcp")
+        }
+
+        if (coturnServer.turnsTcpPort != null) {
+            result.add("turns://${coturnServer.host}:${coturnServer.turnsTcpPort}?transport=tcp")
+        }
+
+        return result
+    }
 }
