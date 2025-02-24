@@ -3,16 +3,15 @@ package com.faforever.icebreaker.service
 import com.faforever.icebreaker.config.FafProperties
 import com.faforever.icebreaker.persistence.IceSessionEntity
 import com.faforever.icebreaker.persistence.IceSessionRepository
+import com.faforever.icebreaker.security.getUserId
 import com.faforever.icebreaker.util.AsyncRunner
 import io.quarkus.scheduler.Scheduled
 import io.quarkus.security.ForbiddenException
-import io.quarkus.security.UnauthorizedException
 import io.quarkus.security.identity.SecurityIdentity
 import io.smallrye.jwt.build.Jwt
 import jakarta.enterprise.inject.Instance
 import jakarta.inject.Singleton
 import jakarta.transaction.Transactional
-import org.eclipse.microprofile.jwt.JsonWebToken
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.time.Instant
@@ -30,12 +29,7 @@ class SessionService(
     private val activeSessionHandlers = sessionHandlers.filter { it.active }
 
     fun buildToken(gameId: Long): String {
-        val userId =
-            when (val principal = securityIdentity?.principal) {
-                null -> throw UnauthorizedException("No principal available")
-                is JsonWebToken -> principal.subject.toInt()
-                else -> throw IllegalStateException("Unexpected principal type: ${principal.javaClass} ($principal)")
-            }
+        val userId = securityIdentity.getUserId()
 
         return Jwt
             .subject(userId.toString())
