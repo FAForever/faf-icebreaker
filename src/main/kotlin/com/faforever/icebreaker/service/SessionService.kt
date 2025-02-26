@@ -133,7 +133,9 @@ class SessionService(
 
         return localEventBroadcast.filter {
             it.gameId == gameId && (it.recipientId == userId || (it.recipientId == null && it.senderId != userId))
-        }
+        }.onSubscription().invoke(Runnable {
+            LOG.debug("Subscription to gameId $gameId events established")
+        })
     }
 
     fun onCandidatesReceived(gameId: Long, candidatesMessage: CandidatesMessage) {
@@ -152,6 +154,7 @@ class SessionService(
 
     @Incoming("events-in")
     fun onEventMessage(eventMessage: JsonObject) {
+        LOG.debug("Received event message: $eventMessage")
         val parsedMessage = objectMapper.convertValue<EventMessage>(eventMessage.map)
         localEventEmitter.emit(parsedMessage)
     }
