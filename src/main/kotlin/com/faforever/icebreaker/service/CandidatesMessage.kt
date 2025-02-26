@@ -28,7 +28,7 @@ data class ConnectedMessage(
 data class CandidatesMessage(
     override val gameId: Long,
     override val senderId: Long,
-    override val recipientId: Long,
+    override val recipientId: Long?,
     val candidates: List<CandidateDescriptor>,
 ) : EventMessage {
 
