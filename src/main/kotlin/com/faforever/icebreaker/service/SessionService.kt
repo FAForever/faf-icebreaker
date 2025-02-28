@@ -18,7 +18,6 @@ import io.vertx.core.json.JsonObject
 import jakarta.enterprise.inject.Instance
 import jakarta.inject.Singleton
 import jakarta.transaction.Transactional
-import org.eclipse.microprofile.jwt.JsonWebToken
 import org.eclipse.microprofile.reactive.messaging.Channel
 import org.eclipse.microprofile.reactive.messaging.Emitter
 import org.eclipse.microprofile.reactive.messaging.Incoming
@@ -133,9 +132,11 @@ class SessionService(
 
         return localEventBroadcast.filter {
             it.gameId == gameId && (it.recipientId == userId || (it.recipientId == null && it.senderId != userId))
-        }.onSubscription().invoke(Runnable {
-            LOG.debug("Subscription to gameId $gameId events established")
-        })
+        }.onSubscription().invoke(
+            Runnable {
+                LOG.debug("Subscription to gameId $gameId events established")
+            },
+        )
     }
 
     fun onCandidatesReceived(gameId: Long, candidatesMessage: CandidatesMessage) {
