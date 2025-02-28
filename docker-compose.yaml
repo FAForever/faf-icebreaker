@@ -8,3 +8,12 @@ services:
       MARIADB_PASSWORD: banana
     ports:
       - "3306:3306"
+
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    environment:
+      RABBITMQ_DEFAULT_VHOST: /faf-core
+      RABBITMQ_DEFAULT_USER: faf-icebreaker
+      RABBITMQ_DEFAULT_PASS: banana
+    ports:
+      - "5672:5672"
