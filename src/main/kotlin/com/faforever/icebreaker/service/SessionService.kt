@@ -5,6 +5,7 @@ import com.faforever.icebreaker.persistence.IceSessionEntity
 import com.faforever.icebreaker.persistence.IceSessionRepository
 import com.faforever.icebreaker.security.CurrentUserService
 import com.faforever.icebreaker.security.getUserId
+import com.faforever.icebreaker.service.loki.LokiService
 import com.faforever.icebreaker.util.AsyncRunner
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.convertValue
@@ -38,6 +39,7 @@ class SessionService(
     private val objectMapper: ObjectMapper,
     @Channel("events-out")
     private val rabbitmqEventEmitter: Emitter<EventMessage>,
+    private val lokiService: LokiService,
 ) {
     private val activeSessionHandlers = sessionHandlers.filter { it.active }
     private val localEventEmitter = MultiEmitterProcessor.create<EventMessage>()
@@ -127,8 +129,8 @@ class SessionService(
     }
 
     fun listenForEventMessages(gameId: Long): Multi<EventMessage> {
-        val userId = currentUserService.getCurrentUserId()
-        rabbitmqEventEmitter.send(ConnectedMessage(gameId = gameId, senderId = currentUserService.getCurrentUserId()!!))
+        val userId = currentUserService.getCurrentUserId()!!
+        rabbitmqEventEmitter.send(ConnectedMessage(gameId = gameId, senderId = userId))
 
         return localEventBroadcast.filter {
             it.gameId == gameId && (it.recipientId == userId || (it.recipientId == null && it.senderId != userId))
@@ -158,5 +160,13 @@ class SessionService(
         LOG.debug("Received event message: $eventMessage")
         val parsedMessage = objectMapper.convertValue<EventMessage>(eventMessage.map)
         localEventEmitter.emit(parsedMessage)
+    }
+
+    fun onLogsPushed(gameId: Long, logs: List<LogMessage>) {
+        val currentUserId = currentUserService.getCurrentUserId()!!
+
+        LOG.debug("Received logs for gameId $gameId from userId $currentUserId")
+
+        lokiService.forwardLogs(gameId = gameId, userId = currentUserId, logs = logs)
     }
 }

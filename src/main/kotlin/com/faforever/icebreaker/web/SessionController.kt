@@ -2,6 +2,7 @@ package com.faforever.icebreaker.web
 
 import com.faforever.icebreaker.service.CandidatesMessage
 import com.faforever.icebreaker.service.EventMessage
+import com.faforever.icebreaker.service.LogMessage
 import com.faforever.icebreaker.service.Session
 import com.faforever.icebreaker.service.SessionService
 import io.quarkus.runtime.annotations.RegisterForReflection
@@ -79,4 +80,12 @@ class SessionController(
     @PermissionsAllowed("USER:lobby")
     @RestStreamElementType(MediaType.APPLICATION_JSON)
     fun getSessionEvents(@RestPath gameId: Long): Multi<EventMessage> = sessionService.listenForEventMessages(gameId)
+
+    @POST
+    @Path("/game/{gameId}/logs")
+    @PermissionsAllowed("USER:lobby")
+    @Consumes(MediaType.APPLICATION_JSON)
+    fun postLogs(@RestPath gameId: Long, logRequest: List<LogMessage>) {
+        sessionService.onLogsPushed(gameId, logRequest)
+    }
 }

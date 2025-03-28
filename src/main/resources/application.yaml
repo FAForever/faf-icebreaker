@@ -32,9 +32,18 @@ quarkus:
         healthcheck:
           paths: "/q/health"
           policy: permit
+        openapi:
+          paths: "/q/openapi, /q/swagger-ui, /q/swagger-ui/*"
+          policy: permit
         authenticated:
           paths: "/*"
           policy: authenticated
+  rest-client:
+    loki:
+      url: ${LOKI_BASE_URL:http://localhost:3100}
+  swagger-ui:
+    always-include: true
+    path: "/q/swagger-ui"
 
 faf:
   self-url: ${SELF_URL:https://ice.faforever.com}
@@ -56,6 +65,9 @@ cloudflare:
   turn-enabled: ${CLOUDFLARE_TURN_ENABLED:true}
   turn-key-id: ${CLOUDFLARE_TURN_KEY_ID:undefined}
   turn-key-api-token: ${CLOUDFLARE_TURN_KEY_API_KEY:undefined}
+loki:
+  app-identifier: "faf-pioneer"
+  enabled: ${LOKI_ENABLED:true}
 smallrye:
   jwt:
     sign:

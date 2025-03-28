@@ -17,3 +17,13 @@ services:
       RABBITMQ_DEFAULT_PASS: banana
     ports:
       - "5672:5672"
+
+  loki:
+    image: grafana/loki
+    ports:
+      - "3100:3100"
+
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
