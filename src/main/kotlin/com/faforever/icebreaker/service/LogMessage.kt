@@ -7,4 +7,3 @@ data class LogMessage(
     val message: String,
     val metaData: Map<String, Any?>,
 )
-
