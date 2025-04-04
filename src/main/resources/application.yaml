@@ -51,7 +51,7 @@ faf:
   real-ip-header: ${REAL_IP_HEADER:X-Real-Ip}
 
   token-lifetime-seconds: 86400 # 24h because of lobbies/games/reconnects can happen for a long time
-  max-session-life-time-hours: 24
+  max-session-life-time-hours: 168 # 1 week
 xirsys:
   enabled: ${XIRSYS_ENABLED:true}
   base-url: "https://global.xirsys.net"
