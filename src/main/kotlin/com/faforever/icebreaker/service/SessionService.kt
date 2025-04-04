@@ -1,6 +1,8 @@
 package com.faforever.icebreaker.service
 
 import com.faforever.icebreaker.config.FafProperties
+import com.faforever.icebreaker.persistence.GameUserStatsEntity
+import com.faforever.icebreaker.persistence.GameUserStatsRepository
 import com.faforever.icebreaker.persistence.IceSessionEntity
 import com.faforever.icebreaker.persistence.IceSessionRepository
 import com.faforever.icebreaker.security.CurrentUserService
@@ -14,7 +16,9 @@ import io.quarkus.security.ForbiddenException
 import io.quarkus.security.identity.SecurityIdentity
 import io.smallrye.jwt.build.Jwt
 import io.smallrye.mutiny.Multi
+import io.smallrye.mutiny.Uni
 import io.smallrye.mutiny.helpers.MultiEmitterProcessor
+import io.smallrye.mutiny.infrastructure.Infrastructure
 import io.vertx.core.json.JsonObject
 import jakarta.enterprise.inject.Instance
 import jakarta.inject.Singleton
@@ -34,6 +38,7 @@ class SessionService(
     sessionHandlers: Instance<SessionHandler>,
     private val fafProperties: FafProperties,
     private val iceSessionRepository: IceSessionRepository,
+    private val gameUserStatsRepository: GameUserStatsRepository,
     private val securityIdentity: SecurityIdentity,
     private val currentUserService: CurrentUserService,
     private val objectMapper: ObjectMapper,
@@ -120,25 +125,51 @@ class SessionService(
         LOG.info("Cleaning up outdated sessions")
         iceSessionRepository
             .findByCreatedAtLesserThan(
-                instant = Instant.now().plus(fafProperties.maxSessionLifeTimeHours(), ChronoUnit.HOURS),
+                instant = Instant.now().minus(fafProperties.maxSessionLifeTimeHours(), ChronoUnit.HOURS),
             ).forEach { iceSession ->
                 LOG.debug("Cleaning up session id ${iceSession.id}")
                 activeSessionHandlers.forEach { it.deleteSession(iceSession.id) }
+
+                gameUserStatsRepository.deleteByGameId(iceSession.gameId)
                 iceSessionRepository.delete(iceSession)
             }
     }
 
     fun listenForEventMessages(gameId: Long): Multi<EventMessage> {
         val userId = currentUserService.getCurrentUserId()!!
-        rabbitmqEventEmitter.send(ConnectedMessage(gameId = gameId, senderId = userId))
 
-        return localEventBroadcast.filter {
-            it.gameId == gameId && (it.recipientId == userId || (it.recipientId == null && it.senderId != userId))
-        }.onSubscription().invoke(
-            Runnable {
-                LOG.debug("Subscription to gameId $gameId events established")
-            },
-        )
+        // Use Uni to wrap the blocking repository calls
+        val userStatsUni = Uni.createFrom().item {
+            gameUserStatsRepository.findByGameIdAndUserId(gameId = gameId, userId = userId)
+        }.runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
+
+        // Use flatMap to reactively persist or increment stats
+        return userStatsUni.onItem().transformToUni { gameUserStats ->
+            if (gameUserStats != null) {
+                // If gameUserStats exists update the stats
+                Uni.createFrom().item {
+                    gameUserStatsRepository.incrementConnectionAttempts(gameId = gameId, userId = userId)
+                }
+            } else {
+                // If not, persist the new stats reactively
+                Uni.createFrom().item {
+                    gameUserStatsRepository.persist(
+                        GameUserStatsEntity(
+                            gameId = gameId,
+                            userId = userId,
+                        ),
+                    )
+                }
+            }
+        }.flatMap {
+            // Send message after processing stats persistence or increment
+            Uni.createFrom().completionStage(rabbitmqEventEmitter.send(ConnectedMessage(gameId = gameId, senderId = userId)))
+        }.onItem().transformToMulti {
+            LOG.debug("Subscription to gameId $gameId events established")
+
+            localEventBroadcast
+                .filter { event -> event.gameId == gameId && (event.recipientId == userId || (event.recipientId == null && event.senderId != userId)) }
+        }
     }
 
     fun onCandidatesReceived(gameId: Long, candidatesMessage: CandidatesMessage) {
@@ -157,7 +188,7 @@ class SessionService(
 
     @Incoming("events-in")
     fun onEventMessage(eventMessage: JsonObject) {
-        LOG.debug("Received event message: $eventMessage")
+        LOG.debug("Received event message: {}", eventMessage)
         val parsedMessage = objectMapper.convertValue<EventMessage>(eventMessage.map)
         localEventEmitter.emit(parsedMessage)
     }
@@ -165,7 +196,15 @@ class SessionService(
     fun onLogsPushed(gameId: Long, logs: List<LogMessage>) {
         val currentUserId = currentUserService.getCurrentUserId()!!
 
-        LOG.debug("Received logs for gameId $gameId from userId $currentUserId")
+        LOG.debug("Received logs for gameId {} from userId {}", gameId, currentUserId)
+
+        if (gameUserStatsRepository.findByGameIdAndUserId(gameId = gameId, userId = currentUserId) == null) {
+            LOG.error("User id {} is not connected to game id {}", currentUserId, gameId)
+            throw ForbiddenException()
+        }
+
+        val estimatedLogsSize = objectMapper.writeValueAsString(logs).toByteArray().size
+        gameUserStatsRepository.incrementLogBytesPushed(gameId, currentUserId, estimatedLogsSize)
 
         lokiService.forwardLogs(gameId = gameId, userId = currentUserId, logs = logs)
     }

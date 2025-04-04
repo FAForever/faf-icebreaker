@@ -1,7 +1,6 @@
 package com.faforever.icebreaker.service.loki
 
 import com.faforever.icebreaker.service.LogMessage
-import com.fasterxml.jackson.databind.ObjectMapper
 import jakarta.annotation.PostConstruct
 import jakarta.enterprise.context.ApplicationScoped
 import org.eclipse.microprofile.rest.client.inject.RestClient
@@ -15,7 +14,6 @@ class LokiService(
     private val lokiProperties: LokiProperties,
     @RestClient
     private val lokiApiClient: LokiApiClient,
-    private val objectMapper: ObjectMapper,
 ) {
 
     @PostConstruct
@@ -45,7 +43,6 @@ class LokiService(
             ),
         )
 
-        println(objectMapper.writeValueAsString(request))
         lokiApiClient.push(request)
     }
 }
