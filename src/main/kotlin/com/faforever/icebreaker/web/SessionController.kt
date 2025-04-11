@@ -1,6 +1,5 @@
 package com.faforever.icebreaker.web
 
-import com.faforever.icebreaker.service.CandidatesMessage
 import com.faforever.icebreaker.service.EventMessage
 import com.faforever.icebreaker.service.LogMessage
 import com.faforever.icebreaker.service.Session
@@ -71,8 +70,8 @@ class SessionController(
     @Path("/game/{gameId}/events")
     @PermissionsAllowed("USER:lobby")
     @Consumes(MediaType.APPLICATION_JSON)
-    fun postEvent(@RestPath gameId: Long, candidatesMessage: CandidatesMessage) {
-        sessionService.onCandidatesReceived(gameId, candidatesMessage)
+    fun postEvent(@RestPath gameId: Long, eventMessage: EventMessage) {
+        sessionService.onMessageReceived(gameId, eventMessage)
     }
 
     @GET

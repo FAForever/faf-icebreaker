@@ -172,18 +172,22 @@ class SessionService(
         }
     }
 
-    fun onCandidatesReceived(gameId: Long, candidatesMessage: CandidatesMessage) {
+    fun onMessageReceived(gameId: Long, eventMessage: EventMessage) {
+        check(eventMessage !is ConnectedMessage) {
+            "ConnectedMessage is implicitly created and must not be sent by peers"
+        }
+
         // Check messages for manipulation. We need to prevent cross-channel vulnerabilities.
-        check(candidatesMessage.gameId == gameId) {
-            "gameId $gameId from endpoint does not match gameId ${candidatesMessage.gameId} in candidateMessage"
+        check(eventMessage.gameId == gameId) {
+            "gameId $gameId from endpoint does not match gameId ${eventMessage.gameId} in candidateMessage"
         }
 
         val currentUserId = currentUserService.getCurrentUserId()
-        check(candidatesMessage.senderId == currentUserService.getCurrentUserId()) {
-            "current user id $currentUserId from endpoint does not match sourceId ${candidatesMessage.senderId} in candidateMessage"
+        check(eventMessage.senderId == currentUserService.getCurrentUserId()) {
+            "current user id $currentUserId from endpoint does not match sourceId ${eventMessage.senderId} in candidateMessage"
         }
 
-        rabbitmqEventEmitter.send(candidatesMessage)
+        rabbitmqEventEmitter.send(eventMessage)
     }
 
     @Incoming("events-in")

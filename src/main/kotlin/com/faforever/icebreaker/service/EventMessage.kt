@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode
 @JsonSubTypes(
     JsonSubTypes.Type(value = CandidatesMessage::class, name = "candidates"),
     JsonSubTypes.Type(value = ConnectedMessage::class, name = "connected"),
+    JsonSubTypes.Type(value = PeerClosingMessage::class, name = "peerClosing"),
 )
 @JsonInclude(JsonInclude.Include.ALWAYS)
 interface EventMessage {
@@ -18,6 +19,9 @@ interface EventMessage {
     val recipientId: Long?
 }
 
+/**
+ * This message indicates a new peer is listening for events
+ */
 @JvmRecord
 data class ConnectedMessage(
     override val gameId: Long,
@@ -25,6 +29,19 @@ data class ConnectedMessage(
     override val recipientId: Long? = null,
 ) : EventMessage
 
+/**
+ * This message indicates an intentional closing of a connected peer
+ */
+@JvmRecord
+data class PeerClosingMessage(
+    override val gameId: Long,
+    override val senderId: Long,
+    override val recipientId: Long? = null,
+) : EventMessage
+
+/**
+ * This message contains the WebRTC details for a peer-to-peer connection
+ */
 @JvmRecord
 data class CandidatesMessage(
     override val gameId: Long,
