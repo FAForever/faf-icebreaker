@@ -44,7 +44,7 @@ dependencies {
     implementation("io.quarkus:quarkus-flyway")
     implementation("org.flywaydb:flyway-mysql")
     implementation("com.maxmind.geoip2:geoip2:4.2.1")
-    implementation("io.hypersistence:hypersistence-utils-hibernate-63:3.9.9")
+    implementation("io.hypersistence:hypersistence-utils-hibernate-63:3.9.10")
     testImplementation("io.quarkus:quarkus-junit5")
     testImplementation("io.rest-assured:rest-assured")
 }
