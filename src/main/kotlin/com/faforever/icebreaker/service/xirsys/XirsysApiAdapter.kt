@@ -3,6 +3,7 @@ package com.faforever.icebreaker.service.xirsys
 import com.faforever.icebreaker.config.FafProperties
 import com.faforever.icebreaker.service.xirsys.geolocation.RegionSelectorService
 import com.faforever.icebreaker.service.xirsys.geolocation.XirsysRegion
+import com.faforever.icebreaker.util.ErrorLoggingFilter
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import io.vertx.core.http.HttpServerRequest
@@ -41,7 +42,9 @@ class XirsysApiAdapter(
                 username = xirsysProperties.ident(),
                 password = xirsysProperties.secret(),
             ),
-        ).build(XirsysApiClient::class.java)
+        )
+        .register(ErrorLoggingFilter(LOG))
+        .build(XirsysApiClient::class.java)
 
     private fun getApiClientForRegion(region: XirsysRegion): XirsysApiClient =
         apiClientByRegion.getOrPut(region) { buildXirsysApiClient(region.apiUrl) }
@@ -93,12 +96,16 @@ class XirsysApiAdapter(
         turnRequest: TurnRequest = TurnRequest(),
     ): TurnResponse = parseAndUnwrap<TurnResponse> {
         val region = regionSelectorService.getClosestRegion(httpRequest.getIp())
-        getApiClientForRegion(region).requestIceServers(
-            namespace = xirsysProperties.channelNamespace(),
-            environment = fafProperties.environment(),
-            channelName = channelName,
-            turnRequest = turnRequest,
-        )
+        getApiClientForRegion(region).runCatching {
+            requestIceServers(
+                namespace = xirsysProperties.channelNamespace(),
+                environment = fafProperties.environment(),
+                channelName = channelName,
+                turnRequest = turnRequest,
+            )
+        }.onFailure {
+            LOG.error("Failed to request ice servers for namespace=${xirsysProperties.channelNamespace()}, environment=${fafProperties.environment()}, channelName=$channelName", it)
+        }.getOrThrow()
     }
 
     @Throws(IOException::class)
