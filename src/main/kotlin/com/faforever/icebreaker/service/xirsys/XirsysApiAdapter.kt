@@ -94,8 +94,8 @@ class XirsysApiAdapter(
     fun requestIceServers(
         channelName: String,
         turnRequest: TurnRequest = TurnRequest(),
-    ): TurnResponse = parseAndUnwrap<TurnResponse> {
-        runCatching {
+    ): TurnResponse = runCatching {
+        parseAndUnwrap<TurnResponse> {
             val region = regionSelectorService.getClosestRegion(httpRequest.getIp())
             getApiClientForRegion(region)
                 .requestIceServers(
@@ -104,10 +104,10 @@ class XirsysApiAdapter(
                     channelName = channelName,
                     turnRequest = turnRequest,
                 )
-        }.onFailure {
-            LOG.error("Failed to request ice servers for namespace=${xirsysProperties.channelNamespace()}, environment=${fafProperties.environment()}, channelName=$channelName", it)
-        }.getOrThrow()
-    }
+        }
+    }.onFailure {
+        LOG.error("Failed to request ice servers for namespace=${xirsysProperties.channelNamespace()}, environment=${fafProperties.environment()}, channelName=$channelName", it)
+    }.getOrThrow()
 
     @Throws(IOException::class)
     private inline fun <reified T : Any> parseAndUnwrap(getResponse: () -> String): T {
