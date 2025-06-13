@@ -2,7 +2,6 @@ package com.faforever.icebreaker.service.xirsys.geolocation
 
 import com.faforever.icebreaker.service.xirsys.XirsysProperties
 import com.maxmind.geoip2.DatabaseReader
-import com.maxmind.geoip2.model.CityResponse
 import jakarta.inject.Singleton
 import org.slf4j.LoggerFactory
 import java.net.InetAddress
@@ -33,11 +32,13 @@ class RegionSelectorService(
 
     fun getClosestRegion(ipAddress: InetAddress): XirsysRegion =
         geoLocationReader
-            ?.tryCity(ipAddress)
-            ?.map(CityResponse::getLocation)
-            ?.map { getClosestRegion(UserLocation(latitude = it.latitude, longitude = it.longitude)) }
-            ?.orElse(null)
+            ?.runCatching { city(ipAddress) }
+            ?.onFailure { LOG.warn("Failed to get geo location for $ipAddress", it) }
+            ?.getOrNull()
+            ?.location
+            ?.let { getClosestRegion(UserLocation(latitude = it.latitude, longitude = it.longitude)) }
             ?: XirsysRegion.fallbackRegion
 
-    private fun getClosestRegion(userLocation: UserLocation): XirsysRegion = XirsysRegion.allRegions.minBy { it.distanceTo(userLocation) }
+    private fun getClosestRegion(userLocation: UserLocation): XirsysRegion =
+        XirsysRegion.allRegions.minBy { it.distanceTo(userLocation) }
 }

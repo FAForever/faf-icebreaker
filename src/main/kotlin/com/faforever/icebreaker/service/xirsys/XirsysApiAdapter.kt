@@ -95,14 +95,15 @@ class XirsysApiAdapter(
         channelName: String,
         turnRequest: TurnRequest = TurnRequest(),
     ): TurnResponse = parseAndUnwrap<TurnResponse> {
-        val region = regionSelectorService.getClosestRegion(httpRequest.getIp())
-        getApiClientForRegion(region).runCatching {
-            requestIceServers(
-                namespace = xirsysProperties.channelNamespace(),
-                environment = fafProperties.environment(),
-                channelName = channelName,
-                turnRequest = turnRequest,
-            )
+        runCatching {
+            val region = regionSelectorService.getClosestRegion(httpRequest.getIp())
+            getApiClientForRegion(region)
+                .requestIceServers(
+                    namespace = xirsysProperties.channelNamespace(),
+                    environment = fafProperties.environment(),
+                    channelName = channelName,
+                    turnRequest = turnRequest,
+                )
         }.onFailure {
             LOG.error("Failed to request ice servers for namespace=${xirsysProperties.channelNamespace()}, environment=${fafProperties.environment()}, channelName=$channelName", it)
         }.getOrThrow()
