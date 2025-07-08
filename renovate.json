@@ -16,12 +16,12 @@
       "matchManagers": [
         "gradle"
       ],
-      "matchPackagePatterns": [
-        "^.*$"
-      ],
       "enabled": true,
       "labels": [
         "dependencies"
+      ],
+      "matchPackageNames": [
+        "/^.*$/"
       ]
     },
     {
