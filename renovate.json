@@ -2,6 +2,7 @@
   "extends": [
     "config:recommended"
   ],
+  "schedule": ["monthly"],
   "packageRules": [
     {
       "matchDatasources": [
