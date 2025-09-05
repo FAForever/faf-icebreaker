@@ -95,6 +95,7 @@ class SessionService(
 
         return Session(
             id = gameId.toString(),
+            forceRelay = fafProperties.forceRelay(),
             servers = servers,
         )
     }
