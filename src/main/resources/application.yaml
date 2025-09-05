@@ -48,6 +48,7 @@ quarkus:
 faf:
   self-url: ${SELF_URL:https://ice.faforever.com}
   environment: ${ENVIRONMENT:dev}
+  force-relay: ${FORCE_RELAY:false}
   real-ip-header: ${REAL_IP_HEADER:X-Real-Ip}
 
   token-lifetime-seconds: 86400 # 24h because of lobbies/games/reconnects can happen for a long time
