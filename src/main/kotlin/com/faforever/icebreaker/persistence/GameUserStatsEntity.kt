@@ -2,7 +2,6 @@ package com.faforever.icebreaker.persistence
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory
 import com.fasterxml.jackson.databind.node.ObjectNode
-import io.hypersistence.utils.hibernate.type.json.JsonType
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheEntityBase
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheRepository
 import jakarta.inject.Singleton
@@ -13,7 +12,8 @@ import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import jakarta.transaction.Transactional
-import org.hibernate.annotations.Type
+import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.type.SqlTypes
 import java.time.Instant
 
 @Entity
@@ -24,7 +24,7 @@ data class GameUserStatsEntity(
     val userId: Long,
     val connectionAttempts: Long = 1,
     val logBytesPushed: Long = 0,
-    @Type(JsonType::class)
+    @JdbcTypeCode(SqlTypes.JSON)
     val connectivityStatus: ObjectNode = JsonNodeFactory.instance.objectNode(),
     @Column(insertable = false, updatable = false) val createdAt: Instant = Instant.now(),
     @Column(insertable = false, updatable = false) val updatedAt: Instant = Instant.now(),
