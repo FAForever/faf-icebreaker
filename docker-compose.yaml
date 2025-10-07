@@ -10,7 +10,7 @@ services:
       - "3306:3306"
 
   rabbitmq:
-    image: rabbitmq:3.13-management
+    image: rabbitmq:4.1-management
     environment:
       RABBITMQ_DEFAULT_VHOST: /faf-core
       RABBITMQ_DEFAULT_USER: faf-icebreaker
