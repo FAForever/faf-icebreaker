@@ -1,6 +1,8 @@
 # Gradle
 .gradle/
 build/
+# Created by the Gradle kotlin plugin
+/.kotlin/
 
 # Eclipse
 .project
@@ -37,3 +39,4 @@ nb-configuration.xml
 
 # Plugin directory
 /.quarkus/cli/plugins/
+

@@ -160,3 +160,36 @@ rabbitmq-password: ${RABBITMQ_PASSWORD:banana}
            level: DEBUG
         "io.quarkus":
            level: INFO
+
+"%test":
+  xirsys:
+    enabled: false
+  cloudflare:
+    enabled: false
+  quarkus:
+    oidc:
+      auth-server-url: https://hydra.faforever.com
+      self-tenant:
+        discovery-enabled: false
+        token:
+          signature-algorithm: RS256
+          forced-jwk-refresh-interval: 0S
+        public-key: |-
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA17ArJfVtL51tpORmjTla
+          GeizxWLutGNQneBEUV77fCsyk5thx2Xiyne+zi3iB0eEbydkO+khcHwwTN+ReXhM
+          dZoz7mtpY8Wzm7IM/2wPcgcDtUboKTTnvhqBlIT8mb5pmcKkZ50LE/0h1Wb0au3o
+          +pPipCX9PSCDsX1qxlI/Emo1t4hKZLinTaY6dXUZyXWQGfJldS4J8BwgH6LC97d/
+          jxJQUsZ0UDVvYmFcAfcEAFivmor8ecGq4bgnsilbQ2kdMfemzlE2ii+Iv1IoZ9Ah
+          JRreWQPdO8B2uvzeGfLLF42Pv74s2AdlWMbgBvzFZJG8FlFExo8xBF+lsIeYnL1Z
+          tQIDAQAB
+          -----END PUBLIC KEY-----
+    log:
+      level: INFO
+      category:
+        "org.hibernate.SQL":
+          level: DEBUG
+        "com.faforever":
+           level: DEBUG
+        "io.quarkus":
+           level: INFO
