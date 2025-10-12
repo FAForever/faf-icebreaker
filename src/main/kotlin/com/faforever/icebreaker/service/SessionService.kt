@@ -121,7 +121,10 @@ class SessionService(
         }
     }
 
-    @Scheduled(every = "10m")
+    // The `delayed` parameter is an inelegant way to avoid a startup race where
+    // the events-out channel isn't ready by the time Quarkus tries to run this method,
+    // causing error messages when running the tests.
+    @Scheduled(delayed = "10s", every = "10m")
     fun cleanUpSessions() {
         LOG.info("Cleaning up outdated sessions")
         iceSessionRepository
