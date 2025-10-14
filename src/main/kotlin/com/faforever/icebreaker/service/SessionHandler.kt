@@ -10,7 +10,11 @@ interface SessionHandler {
      */
     fun createSession(id: String, userId: Long, clientIp: String)
 
+    // Remove an entire session
     fun deleteSession(id: String)
+
+    // Remove a single user from a session
+    fun deletePeerSession(id: String, userId: Long)
 
     fun getIceServers(): List<Server>
 
