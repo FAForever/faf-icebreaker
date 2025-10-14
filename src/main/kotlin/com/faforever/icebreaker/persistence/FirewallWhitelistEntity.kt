@@ -1,8 +1,8 @@
 package com.faforever.icebreaker.persistence
 
-import com.faforever.icebreaker.util.Clock
 import jakarta.enterprise.context.ApplicationScoped
 import java.net.InetAddress
+import java.time.Clock
 import java.time.Instant
 
 // TODO(#132) - store FirewallWhitelistEntity in the DB as an actual entity
@@ -34,4 +34,14 @@ class FirewallWhitelistRepository(
 
     /** Returns a list of all whitelists for [sessionId]. */
     fun getForSessionId(sessionId: String): List<FirewallWhitelistEntity> = allowedIps.filter { it.sessionId == sessionId && it.deletedAt == null }
+
+    /** Removes all whitelists for [sessionId]. */
+    fun removeSession(sessionId: String) {
+        allowedIps.replaceAll {
+            if (it.sessionId == sessionId) {
+                it.deletedAt = clock.instant()
+            }
+            it
+        }
+    }
 }
