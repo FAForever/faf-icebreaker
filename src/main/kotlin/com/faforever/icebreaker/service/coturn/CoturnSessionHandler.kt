@@ -39,7 +39,7 @@ class CoturnSessionHandler(
     }
 
     override fun deleteSession(id: String) {
-        // Coturn has no session handling, we use global access
+        hetznerFirewallService.removeWhitelistsForSession(id)
     }
 
     override fun getIceServers() = coturnServerRepository.findActive().map { Server(id = it.host, region = it.region) }
