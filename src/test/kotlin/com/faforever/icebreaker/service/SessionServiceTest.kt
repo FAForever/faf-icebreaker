@@ -76,6 +76,25 @@ class SessionServiceTest {
         assertThat(allowedIps).isEmpty()
     }
 
+    @TestSecurity(user = "testUser", roles = ["viewer"])
+    @JwtSecurity(
+        claims = [
+            Claim(key = "sub", value = "123"),
+            Claim(key = "scp", value = "[lobby]"),
+            Claim(key = "ext", value = """{"roles":["USER"],"gameId":201}"""),
+        ],
+    )
+    @Test
+    fun `Whitelist expires after client closes WebRTC session`() {
+        service.getSession(201L, "1.2.3.4")
+
+        runBlocking { waitUntilSessionCreated(gameId = 201) }
+        service.onMessageReceived(201, PeerClosingMessage(gameId = 201, senderId = 123))
+
+        val allowedIps = firewallWhitelistRepository.getForSessionId("game/201")
+        assertThat(allowedIps).isEmpty()
+    }
+
     // We create the session entity asynchronously, so this helper waits until
     // the session with the specified ID exists.
     private suspend fun waitUntilSessionCreated(gameId: Long) {

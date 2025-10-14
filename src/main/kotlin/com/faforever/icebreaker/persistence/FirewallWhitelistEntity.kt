@@ -44,7 +44,17 @@ class FirewallWhitelistRepository(
     /** Removes all whitelists for [sessionId]. */
     fun removeSession(sessionId: String) {
         allowedIps.replaceAll {
-            if (it.sessionId == sessionId) {
+            if (it.sessionId == sessionId && it.deletedAt == null) {
+                it.deletedAt = clock.instant()
+            }
+            it
+        }
+    }
+
+    /** Removes the whitelist for user [userId] in session [sessionId]. */
+    fun removeSessionUser(sessionId: String, userId: Long) {
+        allowedIps.replaceAll {
+            if (it.sessionId == sessionId && it.userId == userId && it.deletedAt == null) {
                 it.deletedAt = clock.instant()
             }
             it

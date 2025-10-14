@@ -23,4 +23,10 @@ class HetznerFirewallService(
         LOG.debug("Removing whitelist for session {}", sessionId)
         repository.removeSession(sessionId)
     }
+
+    /** Removes only the whitelist for user [userId] in session [sessionId]. */
+    fun removeWhitelistForSessionUser(userId: Long, sessionId: String) {
+        LOG.debug("Removing user {}'s whitelist for session {}", userId, sessionId)
+        repository.removeSessionUser(sessionId, userId)
+    }
 }
