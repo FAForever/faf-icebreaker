@@ -47,6 +47,11 @@ class XirsysSessionHandler(
         return Uni.createFrom().nullItem()
     }
 
+    override fun deletePeerSession(id: String, userId: Long) {
+        // Xirsys only cares about the entire session being deleted, there's no
+        // per-peer state.
+    }
+
     override fun getIceServers() = listOf(Server(id = SERVER_NAME, region = "Global"))
 
     override fun getIceServersSession(sessionId: String): List<Session.Server> = xirsysApiAdapter.requestIceServers(
