@@ -135,6 +135,12 @@ class HetznerFirewallService(
         awaitedMessagesById.remove(response.id)?.complete(Unit)
         // The response is acked when this function returns
     }
+
+    /** Removes only the whitelist for user [userId] in session [sessionId]. */
+    fun removeWhitelistForSessionUser(userId: Long, sessionId: String) {
+        LOG.debug("Removing user {}'s whitelist for session {}", userId, sessionId)
+        repository.removeSessionUser(sessionId, userId)
+    }
 }
 
 @ApplicationScoped
