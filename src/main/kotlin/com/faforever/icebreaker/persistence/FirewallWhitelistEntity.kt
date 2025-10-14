@@ -1,0 +1,37 @@
+package com.faforever.icebreaker.persistence
+
+import com.faforever.icebreaker.util.Clock
+import jakarta.enterprise.context.ApplicationScoped
+import java.net.InetAddress
+import java.time.Instant
+
+// TODO(#132) - store FirewallWhitelistEntity in the DB as an actual entity
+data class FirewallWhitelistEntity(
+    val id: Long,
+    val sessionId: String,
+    val allowedIp: InetAddress,
+    var deletedAt: Instant?,
+)
+
+@ApplicationScoped
+class FirewallWhitelistRepository(
+    private val clock: Clock,
+) {
+    private val allowedIps: MutableList<FirewallWhitelistEntity> = mutableListOf()
+
+    /** Whitelists [allowedIp] for the session [sessionId]. */
+    fun insert(sessionId: String, allowedIp: InetAddress) {
+        val lastId = allowedIps.map { it.id }.maxOrNull() ?: 0
+        allowedIps.add(
+            FirewallWhitelistEntity(
+                id = lastId + 1,
+                sessionId,
+                allowedIp,
+                deletedAt = null,
+            ),
+        )
+    }
+
+    /** Returns a list of all whitelists for [sessionId]. */
+    fun getForSessionId(sessionId: String): List<FirewallWhitelistEntity> = allowedIps.filter { it.sessionId == sessionId && it.deletedAt == null }
+}

@@ -1,9 +1,11 @@
 package com.faforever.icebreaker.service
 
+import java.net.InetAddress
+
 interface SessionHandler {
     val active: Boolean
 
-    fun createSession(id: String)
+    fun createSession(id: String, clientIp: InetAddress)
 
     fun deleteSession(id: String)
 
