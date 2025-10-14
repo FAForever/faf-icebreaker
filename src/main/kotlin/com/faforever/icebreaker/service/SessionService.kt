@@ -83,7 +83,7 @@ class SessionService(
             throw ForbiddenException("Not authorized to join game $gameId")
         }
 
-        val sessionId = "game/$gameId"
+        val sessionId = buildSessionId(gameId)
 
         val currentUserId = currentUserService.getCurrentUserId() ?: throw ForbiddenException("Unauthenticated")
         val servers =
@@ -195,6 +195,11 @@ class SessionService(
             "current user id $currentUserId from endpoint does not match sourceId ${eventMessage.senderId} in candidateMessage"
         }
 
+        val sessionId = buildSessionId(gameId)
+        if (eventMessage is PeerClosingMessage) {
+            activeSessionHandlers.forEach { it.deletePeerSession(sessionId, currentUserId) }
+        }
+
         rabbitmqEventEmitter.send(eventMessage)
     }
 
@@ -220,4 +225,6 @@ class SessionService(
 
         lokiService.forwardLogs(gameId = gameId, userId = currentUserId, logs = logs)
     }
+
+    private fun buildSessionId(gameId: Long) = "game/$gameId"
 }

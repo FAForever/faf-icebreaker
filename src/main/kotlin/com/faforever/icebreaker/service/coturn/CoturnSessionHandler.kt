@@ -44,7 +44,7 @@ class CoturnSessionHandler(
     }
 
     override fun deletePeerSession(id: String, userId: Long) {
-        // FIXME: delete firewall whitelist
+        hetznerFirewallService.removeWhitelistForSessionUser(sessionId = id, userId = userId)
     }
 
     override fun getIceServers() = coturnServerRepository.findActive().map { Server(id = it.host, region = it.region) }
