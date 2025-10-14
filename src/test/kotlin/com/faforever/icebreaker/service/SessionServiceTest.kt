@@ -8,10 +8,15 @@ import io.quarkus.test.security.TestSecurity
 import io.quarkus.test.security.jwt.Claim
 import io.quarkus.test.security.jwt.JwtSecurity
 import jakarta.inject.Inject
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
+import java.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
 @QuarkusTest
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -48,5 +53,38 @@ class SessionServiceTest {
         val allowedIps = firewallWhitelistRepository.getForSessionId("game/200")
         assertThat(allowedIps).hasSize(1)
         assertThat(allowedIps[0].allowedIp).isEqualTo("1.2.3.4")
+    }
+
+    @TestSecurity(user = "testUser", roles = ["viewer"])
+    @JwtSecurity(
+        claims = [
+            Claim(key = "sub", value = "123"),
+            Claim(key = "scp", value = "[lobby]"),
+            Claim(key = "ext", value = """{"roles":["USER"],"gameId":201}"""),
+        ],
+    )
+    @Test
+    fun `Whitelist expires after time passes`() {
+        val start = clock.instant()
+        service.getSession(201L, InetAddress.getByName("1.2.3.4"))
+
+        runBlocking { waitUntilSessionCreated(gameId = 201) }
+        clock.setNow(start + Duration.ofDays(14))
+        service.cleanUpSessions()
+
+        val allowedIps = firewallWhitelistRepository.getForSessionId("game/201")
+        assertThat(allowedIps).isEmpty()
+    }
+
+    // We create the session entity asynchronously, so this helper waits until
+    // the session with the specified ID exists.
+    private suspend fun waitUntilSessionCreated(gameId: Long) {
+        val timeout = 5_000.milliseconds
+        val checkInterval = 100.milliseconds
+        withTimeoutOrNull(timeout) {
+            while (!iceSessionRepository.existsByGameId(gameId)) {
+                delay(checkInterval)
+            }
+        }
     }
 }

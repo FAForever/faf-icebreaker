@@ -39,7 +39,7 @@ class TurnSessionHandler(
     }
 
     override fun deleteSession(id: String) {
-        // TURN has no session handling, we use global access
+        hetznerFirewallService.removeWhitelistsForSession(id)
     }
 
     override fun getIceServers() = turnServerRepository.findActive().map { Server(id = it.host, region = it.region) }

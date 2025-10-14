@@ -38,4 +38,14 @@ class FirewallWhitelistRepository(
 
     /** Returns a list of all whitelists for [sessionId]. */
     fun getForSessionId(sessionId: String): List<FirewallWhitelistEntity> = allowedIps.filter { it.sessionId == sessionId && it.deletedAt == null }
+
+    /** Removes all whitelists for [sessionId]. */
+    fun removeSession(sessionId: String) {
+        allowedIps.replaceAll {
+            if (it.sessionId == sessionId) {
+                it.deletedAt = clock.instant()
+            }
+            it
+        }
+    }
 }

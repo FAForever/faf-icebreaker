@@ -11,9 +11,16 @@ private val LOG: Logger = LoggerFactory.getLogger(HetznerFirewallService::class.
 class HetznerFirewallService(
     private val repository: FirewallWhitelistRepository,
 ) {
+    /** Whitelists [ipAddress] for session [sessionId]. */
     fun whitelistIpForSession(sessionId: String, ipAddress: String) {
         LOG.debug("Whitelisting IP {} for session {} in Hetzner cloud firewall", ipAddress, sessionId)
         repository.insert(sessionId, ipAddress)
         // TODO(#132): metric for the number of whitelisted sessions
+    }
+
+    /** Removes all whitelists for session [sessionId]. */
+    fun removeWhitelistsForSession(sessionId: String) {
+        LOG.debug("Removing whitelist for session {}", sessionId)
+        repository.removeSession(sessionId)
     }
 }
