@@ -37,6 +37,10 @@ class CloudflareSessionHandler(
         // Cloudflare has no session handling, we use global access
     }
 
+    override fun deletePeerSession(id: String, userId: Long) {
+        // Cloudflare has no session handling, we use global access
+    }
+
     override fun getIceServers() = listOf(Server(id = SERVER_NAME, region = "Global"))
 
     override fun getIceServersSession(sessionId: String): List<Session.Server> =
