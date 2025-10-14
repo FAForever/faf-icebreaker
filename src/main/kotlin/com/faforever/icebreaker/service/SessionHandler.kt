@@ -3,7 +3,12 @@ package com.faforever.icebreaker.service
 interface SessionHandler {
     val active: Boolean
 
-    fun createSession(id: String)
+    /**
+     * Creates a new session for [gameId], connecting from [clientIp].
+     *
+     * [clientIp] is e.g. "88.217.205.180" or "2001:a61:9c01:11ab:c91e:c468:b262:3442".
+     */
+    fun createSession(id: String, clientIp: String)
 
     fun deleteSession(id: String)
 

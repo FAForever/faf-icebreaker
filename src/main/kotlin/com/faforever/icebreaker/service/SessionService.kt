@@ -75,7 +75,12 @@ class SessionService(
     )
     fun getServers(): List<Server> = activeSessionHandlers.flatMap { it.getIceServers() }
 
-    fun getSession(gameId: Long): Session {
+    /**
+     * Creates a new session for [gameId], connecting from [clientIp].
+     *
+     * [clientIp] is e.g. "88.217.205.180".
+     */
+    fun getSession(gameId: Long, clientIp: String): Session {
         // For compatibility reasons right now we only check on mismatch because general FAF JWT are still allowed
         // but have no implicit gameId attached
         securityIdentity.attributes["gameId"]?.takeIf { it != gameId }?.run {
@@ -86,7 +91,7 @@ class SessionService(
 
         val servers =
             activeSessionHandlers.flatMap {
-                it.createSession(sessionId)
+                it.createSession(sessionId, clientIp)
                 it.getIceServersSession(sessionId)
             }
 
