@@ -34,8 +34,8 @@ class CoturnSessionHandler(
         LOG.info("CoturnSessionHandler active: $active")
     }
 
-    override fun createSession(id: String, clientIp: String) {
-        hetznerFirewallService.whitelistIpForSession(id, clientIp)
+    override fun createSession(id: String, userId: Long, clientIp: String) {
+        hetznerFirewallService.whitelistIpForSession(id, userId, clientIp)
     }
 
     override fun deleteSession(id: String) {
