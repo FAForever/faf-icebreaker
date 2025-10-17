@@ -1,6 +1,21 @@
 name: Build
 on: [push, pull_request]
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Check Kotlin formatting
+        run: ./gradlew ktfmtCheck
+
   test:
     runs-on: ubuntu-latest
     steps:
