@@ -66,7 +66,7 @@ class SessionServiceTest {
     @Test
     fun `Whitelist expires after time passes`() {
         val start = clock.instant()
-        service.getSession(201L, InetAddress.getByName("1.2.3.4"))
+        service.getSession(201L, "1.2.3.4")
 
         runBlocking { waitUntilSessionCreated(gameId = 201) }
         clock.setNow(start + Duration.ofDays(14))

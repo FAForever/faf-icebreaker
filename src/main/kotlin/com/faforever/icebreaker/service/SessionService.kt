@@ -89,9 +89,10 @@ class SessionService(
 
         val sessionId = "game/$gameId"
 
+        val currentUserId = currentUserService.getCurrentUserId() ?: throw ForbiddenException("Unauthenticated")
         val servers =
             activeSessionHandlers.flatMap {
-                it.createSession(sessionId, clientIp)
+                it.createSession(sessionId, currentUserId, clientIp)
                 it.getIceServersSession(sessionId)
             }
 

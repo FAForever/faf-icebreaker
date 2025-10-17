@@ -8,7 +8,7 @@ interface SessionHandler {
      *
      * [clientIp] is e.g. "88.217.205.180" or "2001:a61:9c01:11ab:c91e:c468:b262:3442".
      */
-    fun createSession(id: String, clientIp: String)
+    fun createSession(id: String, userId: Long, clientIp: String)
 
     fun deleteSession(id: String)
 
