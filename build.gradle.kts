@@ -9,6 +9,7 @@ plugins {
     id("io.quarkus")
     id("com.diffplug.spotless") version "7.2.1"
     id("com.adarshr.test-logger") version "4.0.0"
+    id("com.ncorti.ktfmt.gradle") version "0.24.0"
 }
 
 repositories {
@@ -105,4 +106,8 @@ spotless {
 
         ktlint(ktlintVersion)
     }
+}
+
+ktfmt {
+    kotlinLangStyle()
 }
