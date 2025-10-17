@@ -22,14 +22,10 @@ import org.eclipse.microprofile.rest.client.inject.RegisterRestClient
 interface LokiApiClient {
 
     data class LokiLogPushRequest(val streams: List<Log>) {
-        data class Log(
-            val stream: Map<String, String>,
-            val values: List<Line>,
-        ) {
+        data class Log(val stream: Map<String, String>, val values: List<Line>) {
             @JsonSerialize(using = LogLineSerializer::class) // Apply the custom serializer
             data class Line(
-                @JsonFormat(shape = JsonFormat.Shape.STRING)
-                val timestamp: Long,
+                @JsonFormat(shape = JsonFormat.Shape.STRING) val timestamp: Long,
                 val message: String,
                 val metaData: Map<String, Any?>,
             )
@@ -55,7 +51,5 @@ interface LokiApiClient {
         }
     }
 
-    @POST
-    @Path("/loki/api/v1/push")
-    fun push(request: LokiLogPushRequest)
+    @POST @Path("/loki/api/v1/push") fun push(request: LokiLogPushRequest)
 }

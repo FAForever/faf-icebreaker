@@ -23,13 +23,13 @@ import io.vertx.core.json.JsonObject
 import jakarta.enterprise.inject.Instance
 import jakarta.inject.Singleton
 import jakarta.transaction.Transactional
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import org.eclipse.microprofile.reactive.messaging.Channel
 import org.eclipse.microprofile.reactive.messaging.Emitter
 import org.eclipse.microprofile.reactive.messaging.Incoming
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import java.time.Instant
-import java.time.temporal.ChronoUnit
 
 private val LOG: Logger = LoggerFactory.getLogger(SessionService::class.java)
 
@@ -42,29 +42,25 @@ class SessionService(
     private val securityIdentity: SecurityIdentity,
     private val currentUserService: CurrentUserService,
     private val objectMapper: ObjectMapper,
-    @Channel("events-out")
-    private val rabbitmqEventEmitter: Emitter<EventMessage>,
+    @Channel("events-out") private val rabbitmqEventEmitter: Emitter<EventMessage>,
     private val lokiService: LokiService,
 ) {
     private val activeSessionHandlers = sessionHandlers.filter { it.active }
     private val localEventEmitter = MultiEmitterProcessor.create<EventMessage>()
-    private val localEventBroadcast: Multi<EventMessage> = localEventEmitter.toMulti().broadcast().toAllSubscribers()
+    private val localEventBroadcast: Multi<EventMessage> =
+        localEventEmitter.toMulti().broadcast().toAllSubscribers()
 
     fun buildToken(gameId: Long): String {
         val userId = securityIdentity.getUserId()
 
-        return Jwt
-            .subject(userId.toString())
-            .claim(
-                "ext",
-                mapOf(
-                    "roles" to listOf("USER"),
-                    "gameId" to gameId,
-                ),
-            ).claim("scp", listOf("lobby"))
+        return Jwt.subject(userId.toString())
+            .claim("ext", mapOf("roles" to listOf("USER"), "gameId" to gameId))
+            .claim("scp", listOf("lobby"))
             .issuer(fafProperties.selfUrl())
             .audience(fafProperties.selfUrl())
-            .expiresAt(Instant.now().plus(fafProperties.maxSessionLifeTimeHours(), ChronoUnit.HOURS))
+            .expiresAt(
+                Instant.now().plus(fafProperties.maxSessionLifeTimeHours(), ChronoUnit.HOURS)
+            )
             .sign()
     }
 
@@ -75,11 +71,12 @@ class SessionService(
     fun getServers(): List<Server> = activeSessionHandlers.flatMap { it.getIceServers() }
 
     fun getSession(gameId: Long): Session {
-        // For compatibility reasons right now we only check on mismatch because general FAF JWT are still allowed
+        // For compatibility reasons right now we only check on mismatch because general FAF JWT are
+        // still allowed
         // but have no implicit gameId attached
-        securityIdentity.attributes["gameId"]?.takeIf { it != gameId }?.run {
-            throw ForbiddenException("Not authorized to join game $gameId")
-        }
+        securityIdentity.attributes["gameId"]
+            ?.takeIf { it != gameId }
+            ?.run { throw ForbiddenException("Not authorized to join game $gameId") }
 
         val sessionId = "game/$gameId"
 
@@ -89,9 +86,7 @@ class SessionService(
                 it.getIceServersSession(sessionId)
             }
 
-        AsyncRunner.runLater {
-            persistSessionDetailsIfNecessary(gameId, sessionId)
-        }
+        AsyncRunner.runLater { persistSessionDetailsIfNecessary(gameId, sessionId) }
 
         return Session(
             id = gameId.toString(),
@@ -101,22 +96,17 @@ class SessionService(
     }
 
     @Transactional
-    fun persistSessionDetailsIfNecessary(
-        gameId: Long,
-        sessionId: String,
-    ) {
+    fun persistSessionDetailsIfNecessary(gameId: Long, sessionId: String) {
         if (!iceSessionRepository.existsByGameId(gameId)) {
             try {
                 LOG.debug("Creating session for gameId $gameId")
                 iceSessionRepository.persist(
-                    IceSessionEntity(
-                        id = sessionId,
-                        gameId = gameId,
-                        createdAt = Instant.now(),
-                    ),
+                    IceSessionEntity(id = sessionId, gameId = gameId, createdAt = Instant.now())
                 )
             } catch (e: Exception) {
-                LOG.warn("Unable to persist session details for game id $gameId and session id $sessionId")
+                LOG.warn(
+                    "Unable to persist session details for game id $gameId and session id $sessionId"
+                )
             }
         }
     }
@@ -129,8 +119,10 @@ class SessionService(
         LOG.info("Cleaning up outdated sessions")
         iceSessionRepository
             .findByCreatedAtLesserThan(
-                instant = Instant.now().minus(fafProperties.maxSessionLifeTimeHours(), ChronoUnit.HOURS),
-            ).forEach { iceSession ->
+                instant =
+                    Instant.now().minus(fafProperties.maxSessionLifeTimeHours(), ChronoUnit.HOURS)
+            )
+            .forEach { iceSession ->
                 LOG.debug("Cleaning up session id ${iceSession.id}")
                 activeSessionHandlers.forEach { it.deleteSession(iceSession.id) }
 
@@ -143,37 +135,53 @@ class SessionService(
         val userId = currentUserService.getCurrentUserId()!!
 
         // Use Uni to wrap the blocking repository calls
-        val userStatsUni = Uni.createFrom().item {
-            gameUserStatsRepository.findByGameIdAndUserId(gameId = gameId, userId = userId)
-        }.runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
+        val userStatsUni =
+            Uni.createFrom()
+                .item {
+                    gameUserStatsRepository.findByGameIdAndUserId(gameId = gameId, userId = userId)
+                }
+                .runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
 
         // Use flatMap to reactively persist or increment stats
-        return userStatsUni.onItem().transformToUni { gameUserStats ->
-            if (gameUserStats != null) {
-                // If gameUserStats exists update the stats
-                Uni.createFrom().item {
-                    gameUserStatsRepository.incrementConnectionAttempts(gameId = gameId, userId = userId)
-                }
-            } else {
-                // If not, persist the new stats reactively
-                Uni.createFrom().item {
-                    gameUserStatsRepository.persist(
-                        GameUserStatsEntity(
+        return userStatsUni
+            .onItem()
+            .transformToUni { gameUserStats ->
+                if (gameUserStats != null) {
+                    // If gameUserStats exists update the stats
+                    Uni.createFrom().item {
+                        gameUserStatsRepository.incrementConnectionAttempts(
                             gameId = gameId,
                             userId = userId,
-                        ),
-                    )
+                        )
+                    }
+                } else {
+                    // If not, persist the new stats reactively
+                    Uni.createFrom().item {
+                        gameUserStatsRepository.persist(
+                            GameUserStatsEntity(gameId = gameId, userId = userId)
+                        )
+                    }
                 }
             }
-        }.flatMap {
-            // Send message after processing stats persistence or increment
-            Uni.createFrom().completionStage(rabbitmqEventEmitter.send(ConnectedMessage(gameId = gameId, senderId = userId)))
-        }.onItem().transformToMulti {
-            LOG.debug("Subscription to gameId $gameId events established")
+            .flatMap {
+                // Send message after processing stats persistence or increment
+                Uni.createFrom()
+                    .completionStage(
+                        rabbitmqEventEmitter.send(
+                            ConnectedMessage(gameId = gameId, senderId = userId)
+                        )
+                    )
+            }
+            .onItem()
+            .transformToMulti {
+                LOG.debug("Subscription to gameId $gameId events established")
 
-            localEventBroadcast
-                .filter { event -> event.gameId == gameId && (event.recipientId == userId || (event.recipientId == null && event.senderId != userId)) }
-        }
+                localEventBroadcast.filter { event ->
+                    event.gameId == gameId &&
+                        (event.recipientId == userId ||
+                            (event.recipientId == null && event.senderId != userId))
+                }
+            }
     }
 
     fun onMessageReceived(gameId: Long, eventMessage: EventMessage) {
@@ -206,7 +214,12 @@ class SessionService(
 
         LOG.debug("Received logs for gameId {} from userId {}", gameId, currentUserId)
 
-        if (gameUserStatsRepository.findByGameIdAndUserId(gameId = gameId, userId = currentUserId) == null) {
+        if (
+            gameUserStatsRepository.findByGameIdAndUserId(
+                gameId = gameId,
+                userId = currentUserId,
+            ) == null
+        ) {
             LOG.error("User id {} is not connected to game id {}", currentUserId, gameId)
             throw ForbiddenException()
         }

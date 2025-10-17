@@ -10,11 +10,11 @@ import com.faforever.icebreaker.service.SessionHandler
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.annotation.PostConstruct
 import jakarta.enterprise.context.ApplicationScoped
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
 import java.util.Base64
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 
 private val LOG: Logger = LoggerFactory.getLogger(CoturnSessionHandler::class.java)
 
@@ -40,20 +40,20 @@ class CoturnSessionHandler(
         // Coturn has no session handling, we use global access
     }
 
-    override fun getIceServers() = coturnServerRepository.findActive().map { Server(id = it.host, region = it.region) }
+    override fun getIceServers() =
+        coturnServerRepository.findActive().map { Server(id = it.host, region = it.region) }
 
     override fun getIceServersSession(sessionId: String): List<Session.Server> =
-        coturnServerRepository
-            .findActive()
-            .map {
-                val (tokenName, tokenSecret) = buildHmac(sessionId, securityIdentity.getUserId(), it.presharedKey)
-                Session.Server(
-                    id = it.host,
-                    username = tokenName,
-                    credential = tokenSecret,
-                    urls = buildUrls(coturnServer = it),
-                )
-            }
+        coturnServerRepository.findActive().map {
+            val (tokenName, tokenSecret) =
+                buildHmac(sessionId, securityIdentity.getUserId(), it.presharedKey)
+            Session.Server(
+                id = it.host,
+                username = tokenName,
+                credential = tokenSecret,
+                urls = buildUrls(coturnServer = it),
+            )
+        }
 
     private fun buildHmac(
         sessionName: String,
@@ -75,9 +75,7 @@ class CoturnSessionHandler(
         return tokenName to tokenSecret
     }
 
-    private fun buildUrls(
-        coturnServer: CoturnServerEntity,
-    ): List<String> {
+    private fun buildUrls(coturnServer: CoturnServerEntity): List<String> {
         val result = mutableListOf<String>()
 
         if (coturnServer.stunPort != null) {

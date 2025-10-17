@@ -8,13 +8,11 @@ import jakarta.ws.rs.core.HttpHeaders
 import java.util.Base64
 
 @Priority(Priorities.AUTHENTICATION)
-class BasicAuthenticationRequestFilter(
-    username: String,
-    password: String,
-) : ClientRequestFilter {
+class BasicAuthenticationRequestFilter(username: String, password: String) : ClientRequestFilter {
     override fun filter(requestContext: ClientRequestContext) {
         requestContext.headers.add(HttpHeaders.AUTHORIZATION, accessToken)
     }
 
-    private val accessToken: String = "Basic " + Base64.getEncoder().encodeToString("$username:$password".toByteArray())
+    private val accessToken: String =
+        "Basic " + Base64.getEncoder().encodeToString("$username:$password".toByteArray())
 }

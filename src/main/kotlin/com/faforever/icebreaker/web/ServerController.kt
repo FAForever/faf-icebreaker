@@ -9,12 +9,8 @@ import jakarta.ws.rs.Produces
 import jakarta.ws.rs.core.MediaType
 
 @Path("/server")
-class ServerController(
-    private val sessionService: SessionService,
-) {
-    data class ServerList(
-        val servers: List<Server>,
-    )
+class ServerController(private val sessionService: SessionService) {
+    data class ServerList(val servers: List<Server>)
 
     @GET
     @Produces(MediaType.APPLICATION_JSON)
@@ -34,6 +30,6 @@ class ServerController(
                     id = it.id,
                     attributes = mapOf("region" to it.region),
                 )
-            },
+            }
         )
 }

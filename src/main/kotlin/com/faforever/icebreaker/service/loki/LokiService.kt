@@ -12,8 +12,7 @@ private val LOG: Logger = LoggerFactory.getLogger(LokiService::class.java)
 @ApplicationScoped
 class LokiService(
     private val lokiProperties: LokiProperties,
-    @RestClient
-    private val lokiApiClient: LokiApiClient,
+    @RestClient private val lokiApiClient: LokiApiClient,
 ) {
 
     @PostConstruct
@@ -24,24 +23,29 @@ class LokiService(
     fun forwardLogs(gameId: Long, userId: Long, logs: List<LogMessage>) {
         if (!lokiProperties.enabled()) return
 
-        val request = LokiApiClient.LokiLogPushRequest(
-            streams = listOf(
-                LokiApiClient.LokiLogPushRequest.Log(
-                    stream = mapOf(
-                        "app" to lokiProperties.appIdentifier(),
-                        "gameId" to gameId.toString(),
-                        "userId" to userId.toString(),
-                    ),
-                    values = logs.map {
-                        LokiApiClient.LokiLogPushRequest.Log.Line(
-                            timestamp = it.timestamp.toInstant().toEpochMilli() * 1_000_000L,
-                            message = it.message,
-                            metaData = it.metaData,
+        val request =
+            LokiApiClient.LokiLogPushRequest(
+                streams =
+                    listOf(
+                        LokiApiClient.LokiLogPushRequest.Log(
+                            stream =
+                                mapOf(
+                                    "app" to lokiProperties.appIdentifier(),
+                                    "gameId" to gameId.toString(),
+                                    "userId" to userId.toString(),
+                                ),
+                            values =
+                                logs.map {
+                                    LokiApiClient.LokiLogPushRequest.Log.Line(
+                                        timestamp =
+                                            it.timestamp.toInstant().toEpochMilli() * 1_000_000L,
+                                        message = it.message,
+                                        metaData = it.metaData,
+                                    )
+                                },
                         )
-                    },
-                ),
-            ),
-        )
+                    )
+            )
 
         lokiApiClient.push(request)
     }

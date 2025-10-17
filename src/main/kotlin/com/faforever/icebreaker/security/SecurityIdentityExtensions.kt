@@ -8,5 +8,8 @@ fun SecurityIdentity.getUserId(): Int =
     when (val principal = principal) {
         null -> throw UnauthorizedException("No principal available")
         is JsonWebToken -> principal.subject.toInt()
-        else -> throw IllegalStateException("Unexpected principal type: ${principal.javaClass} ($principal)")
+        else ->
+            throw IllegalStateException(
+                "Unexpected principal type: ${principal.javaClass} ($principal)"
+            )
     }

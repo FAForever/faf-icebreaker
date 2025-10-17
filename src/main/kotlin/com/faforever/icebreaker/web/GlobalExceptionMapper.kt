@@ -13,16 +13,16 @@ private val LOG: org.slf4j.Logger = LoggerFactory.getLogger(GlobalExceptionMappe
 class GlobalExceptionMapper : ExceptionMapper<Throwable> {
 
     private val isDevMode: Boolean by lazy {
-        val profile = ConfigProvider.getConfig().getOptionalValue("quarkus.profile", String::class.java)
+        val profile =
+            ConfigProvider.getConfig().getOptionalValue("quarkus.profile", String::class.java)
         profile.orElse("prod").equals("dev", ignoreCase = true)
     }
 
     override fun toResponse(exception: Throwable): Response {
         LOG.error("Unhandled exception caught by GlobalExceptionMapper", exception)
 
-        val errorBody = mutableMapOf<String, Any>(
-            "details" to (exception.message ?: "Unknown error"),
-        )
+        val errorBody =
+            mutableMapOf<String, Any>("details" to (exception.message ?: "Unknown error"))
 
         if (isDevMode) {
             errorBody["stack"] = exception.stackTraceToString()

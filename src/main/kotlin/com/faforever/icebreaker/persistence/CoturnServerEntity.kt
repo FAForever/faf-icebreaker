@@ -12,9 +12,7 @@ import jakarta.persistence.Table
 @Entity
 @Table(name = "coturn_servers")
 data class CoturnServerEntity(
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    val id: Long,
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) val id: Long,
     val region: String,
     val host: String,
     val stunPort: Int?,

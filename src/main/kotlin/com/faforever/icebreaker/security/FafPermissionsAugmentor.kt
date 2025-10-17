@@ -42,13 +42,12 @@ class FafPermissionsAugmentor : SecurityIdentityAugmentor {
                     principal
                         .claim<Map<String, Any>>("ext")
                         .map<JsonNumber> { it["gameId"] as? JsonNumber }
-                        .ifPresent {
-                            builder.addAttribute("gameId", it.longValue())
-                        }
+                        .ifPresent { builder.addAttribute("gameId", it.longValue()) }
 
                     builder.addPermissionChecker { requiredPermission ->
                         val hasRole = roles.contains(requiredPermission.name)
-                        val hasScopes = requiredPermission.actions.split(",").all { scopes.contains(it) }
+                        val hasScopes =
+                            requiredPermission.actions.split(",").all { scopes.contains(it) }
                         Uni.createFrom().item(hasRole && hasScopes)
                     }
                 }

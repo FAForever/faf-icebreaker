@@ -16,8 +16,10 @@ internal interface GeoLocation {
         val lonDistance = Math.toRadians(other.longitude - this.longitude)
         val a =
             sin(latDistance / 2) * sin(latDistance / 2) +
-                cos(Math.toRadians(this.latitude)) * cos(Math.toRadians(other.latitude)) *
-                sin(lonDistance / 2) * sin(lonDistance / 2)
+                cos(Math.toRadians(this.latitude)) *
+                    cos(Math.toRadians(other.latitude)) *
+                    sin(lonDistance / 2) *
+                    sin(lonDistance / 2)
         val c = 2 * atan2(sqrt(a), sqrt(1 - a))
         return r * c // Distance in kilometers
     }

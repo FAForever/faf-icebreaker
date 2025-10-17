@@ -15,29 +15,16 @@ const val PATH_EXISTS = "path_exists"
     JsonSubTypes.Type(value = XirsysResponse.Error::class, name = "error"),
 )
 sealed interface XirsysResponse<T : Any> {
-    data class Success<T : Any>(
-        @JsonProperty("v") val data: T,
-    ) : XirsysResponse<T>
+    data class Success<T : Any>(@JsonProperty("v") val data: T) : XirsysResponse<T>
 
-    data class Error<T : Any>(
-        @JsonProperty("v") val code: String,
-    ) : XirsysResponse<T>
+    data class Error<T : Any>(@JsonProperty("v") val code: String) : XirsysResponse<T>
 }
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
-data class TurnRequest(
-    @JsonFormat(shape = JsonFormat.Shape.STRING)
-    val expire: Long = 30,
-) {
+data class TurnRequest(@JsonFormat(shape = JsonFormat.Shape.STRING) val expire: Long = 30) {
     val format: String = "urls"
 }
 
-data class TurnResponse(
-    val iceServers: IceServers,
-) {
-    data class IceServers(
-        val username: String,
-        val urls: List<String>,
-        val credential: String,
-    )
+data class TurnResponse(val iceServers: IceServers) {
+    data class IceServers(val username: String, val urls: List<String>, val credential: String)
 }

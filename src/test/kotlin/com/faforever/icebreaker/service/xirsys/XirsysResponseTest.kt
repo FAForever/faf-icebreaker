@@ -10,10 +10,12 @@ class XirsysResponseTest {
 
     @Test
     fun parseError() {
-        val result: XirsysResponse.Error<List<String>> = objectMapper.readValue("""{"v":"unauthorized","s":"error"}""")
+        val result: XirsysResponse.Error<List<String>> =
+            objectMapper.readValue("""{"v":"unauthorized","s":"error"}""")
         assertEquals("unauthorized", result.code)
 
-        val interfaced: XirsysResponse<List<String>> = objectMapper.readValue("""{"v":"unauthorized","s":"error"}""")
+        val interfaced: XirsysResponse<List<String>> =
+            objectMapper.readValue("""{"v":"unauthorized","s":"error"}""")
         assertEquals(result, interfaced)
     }
 
@@ -30,7 +32,8 @@ class XirsysResponseTest {
                   ],
                  "s": "ok"
                 }
-                """.trimIndent(),
+                """
+                    .trimIndent()
             )
         assertEquals(listOf("my", "my/channel", "my/channel/path"), result.data)
     }

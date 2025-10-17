@@ -9,11 +9,10 @@ import jakarta.enterprise.context.ApplicationScoped
 
 /**
  * This application supports 2 JWT providers:
- *
  * * "Official" FAF access token from Ory Hydra (hydra.faforever.com)
  * * Self-signed JWTs inside this service that are used for extended session token.
  *
- *  This tenant resolver selects the right provider based on the issuer of the JWT.
+ *   This tenant resolver selects the right provider based on the issuer of the JWT.
  */
 @ApplicationScoped
 class CustomTenantResolver(
@@ -27,13 +26,11 @@ class CustomTenantResolver(
             ?.takeIf { it.startsWith("Bearer ") }
             ?.let {
                 val rawToken = it.substring(7)
-                val body =
-                    java.util.Base64
-                        .getDecoder()
-                        .decode(rawToken.split(".")[1])
+                val body = java.util.Base64.getDecoder().decode(rawToken.split(".")[1])
                 val json = objectMapper.readTree(body)
 
                 json["iss"]?.textValue()
-            }?.takeIf { it == fafProperties.selfUrl() }
+            }
+            ?.takeIf { it == fafProperties.selfUrl() }
             ?.let { "self-tenant" }
 }
