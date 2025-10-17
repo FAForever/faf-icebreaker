@@ -5,7 +5,7 @@ import java.net.InetAddress
 interface SessionHandler {
     val active: Boolean
 
-    fun createSession(id: String, clientIp: InetAddress)
+    fun createSession(id: String, userId: Long, clientIp: InetAddress)
 
     fun deleteSession(id: String)
 

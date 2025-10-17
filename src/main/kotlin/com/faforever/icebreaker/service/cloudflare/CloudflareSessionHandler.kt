@@ -30,7 +30,7 @@ class CloudflareSessionHandler(
         LOG.info("CloudflareSessionHandler active: $active, turnEnabled: $turnEnabled")
     }
 
-    override fun createSession(id: String, clientIp: InetAddress) {
+    override fun createSession(id: String, userId: Long, clientIp: InetAddress) {
         // Cloudflare has no session handling, we use global access
     }
 

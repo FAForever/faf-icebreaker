@@ -8,6 +8,7 @@ import java.time.Instant
 // TODO(#132) - store FirewallWhitelistEntity in the DB as an actual entity
 data class FirewallWhitelistEntity(
     val id: Long,
+    val userId: Long,
     val sessionId: String,
     val allowedIp: InetAddress,
     var deletedAt: Instant?,
@@ -20,11 +21,12 @@ class FirewallWhitelistRepository(
     private val allowedIps: MutableList<FirewallWhitelistEntity> = mutableListOf()
 
     /** Whitelists [allowedIp] for the session [sessionId]. */
-    fun insert(sessionId: String, allowedIp: InetAddress) {
+    fun insert(sessionId: String, userId: Long, allowedIp: InetAddress) {
         val lastId = allowedIps.map { it.id }.maxOrNull() ?: 0
         allowedIps.add(
             FirewallWhitelistEntity(
                 id = lastId + 1,
+                userId,
                 sessionId,
                 allowedIp,
                 deletedAt = null,

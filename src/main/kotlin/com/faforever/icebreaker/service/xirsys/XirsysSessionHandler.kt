@@ -30,7 +30,7 @@ class XirsysSessionHandler(
         LOG.info("XirsysSessionHandler active: $active, turnEnabled: $turnEnabled")
     }
 
-    override fun createSession(id: String, clientIp: InetAddress) {
+    override fun createSession(id: String, userId: Long, clientIp: InetAddress) {
         LOG.debug("Creating session id $id")
         xirsysApiAdapter.createChannel(id)
     }
