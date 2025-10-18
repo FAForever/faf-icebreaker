@@ -8,6 +8,7 @@ import jakarta.annotation.PostConstruct
 import jakarta.enterprise.context.ApplicationScoped
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import java.net.InetAddress
 
 private val LOG: Logger = LoggerFactory.getLogger(XirsysSessionHandler::class.java)
 
@@ -29,13 +30,18 @@ class XirsysSessionHandler(
         LOG.info("XirsysSessionHandler active: $active, turnEnabled: $turnEnabled")
     }
 
-    override fun createSession(id: String) {
+    override fun createSession(id: String, userId: Long, clientIp: InetAddress) {
         LOG.debug("Creating session id $id")
         xirsysApiAdapter.createChannel(id)
     }
 
     override fun deleteSession(id: String) {
         xirsysApiAdapter.deleteChannel(channelName = id)
+    }
+
+    override fun deletePeerSession(id: String, userId: Long) {
+        // Xirsys only cares about the entire session being deleted, there's no
+        // per-peer state.
     }
 
     override fun getIceServers() = listOf(Server(id = SERVER_NAME, region = "Global"))

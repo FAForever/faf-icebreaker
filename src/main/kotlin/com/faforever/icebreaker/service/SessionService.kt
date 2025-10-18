@@ -28,7 +28,8 @@ import org.eclipse.microprofile.reactive.messaging.Emitter
 import org.eclipse.microprofile.reactive.messaging.Incoming
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import java.time.Instant
+import java.net.InetAddress
+import java.time.Clock
 import java.time.temporal.ChronoUnit
 
 private val LOG: Logger = LoggerFactory.getLogger(SessionService::class.java)
@@ -45,6 +46,7 @@ class SessionService(
     @Channel("events-out")
     private val rabbitmqEventEmitter: Emitter<EventMessage>,
     private val lokiService: LokiService,
+    private val clock: Clock,
 ) {
     private val activeSessionHandlers = sessionHandlers.filter { it.active }
     private val localEventEmitter = MultiEmitterProcessor.create<EventMessage>()
@@ -64,7 +66,7 @@ class SessionService(
             ).claim("scp", listOf("lobby"))
             .issuer(fafProperties.selfUrl())
             .audience(fafProperties.selfUrl())
-            .expiresAt(Instant.now().plus(fafProperties.maxSessionLifeTimeHours(), ChronoUnit.HOURS))
+            .expiresAt(clock.instant().plus(fafProperties.maxSessionLifeTimeHours(), ChronoUnit.HOURS))
             .sign()
     }
 
@@ -74,18 +76,19 @@ class SessionService(
     )
     fun getServers(): List<Server> = activeSessionHandlers.flatMap { it.getIceServers() }
 
-    fun getSession(gameId: Long): Session {
+    fun getSession(gameId: Long, clientIp: InetAddress): Session {
         // For compatibility reasons right now we only check on mismatch because general FAF JWT are still allowed
         // but have no implicit gameId attached
         securityIdentity.attributes["gameId"]?.takeIf { it != gameId }?.run {
             throw ForbiddenException("Not authorized to join game $gameId")
         }
 
-        val sessionId = "game/$gameId"
+        val sessionId = buildSessionId(gameId)
 
+        val currentUserId = currentUserService.getCurrentUserId() ?: throw ForbiddenException("Unauthenticated")
         val servers =
             activeSessionHandlers.flatMap {
-                it.createSession(sessionId)
+                it.createSession(sessionId, currentUserId, clientIp)
                 it.getIceServersSession(sessionId)
             }
 
@@ -112,7 +115,7 @@ class SessionService(
                     IceSessionEntity(
                         id = sessionId,
                         gameId = gameId,
-                        createdAt = Instant.now(),
+                        createdAt = clock.instant(),
                     ),
                 )
             } catch (e: Exception) {
@@ -126,10 +129,11 @@ class SessionService(
     // causing error messages when running the tests.
     @Scheduled(delayed = "10s", every = "10m")
     fun cleanUpSessions() {
-        LOG.info("Cleaning up outdated sessions")
+        val cleanupTime = clock.instant().minus(fafProperties.maxSessionLifeTimeHours(), ChronoUnit.HOURS)
+        LOG.info("Cleaning up sessions older than $cleanupTime")
         iceSessionRepository
             .findByCreatedAtLesserThan(
-                instant = Instant.now().minus(fafProperties.maxSessionLifeTimeHours(), ChronoUnit.HOURS),
+                instant = cleanupTime,
             ).forEach { iceSession ->
                 LOG.debug("Cleaning up session id ${iceSession.id}")
                 activeSessionHandlers.forEach { it.deleteSession(iceSession.id) }
@@ -187,8 +191,13 @@ class SessionService(
         }
 
         val currentUserId = currentUserService.getCurrentUserId()
-        check(eventMessage.senderId == currentUserService.getCurrentUserId()) {
+        check(eventMessage.senderId == currentUserId) {
             "current user id $currentUserId from endpoint does not match sourceId ${eventMessage.senderId} in candidateMessage"
+        }
+
+        val sessionId = buildSessionId(gameId)
+        if (eventMessage is PeerClosingMessage) {
+            activeSessionHandlers.forEach { it.deletePeerSession(sessionId, currentUserId) }
         }
 
         rabbitmqEventEmitter.send(eventMessage)
@@ -216,4 +225,6 @@ class SessionService(
 
         lokiService.forwardLogs(gameId = gameId, userId = currentUserId, logs = logs)
     }
+
+    private fun buildSessionId(gameId: Long) = "game/$gameId"
 }
