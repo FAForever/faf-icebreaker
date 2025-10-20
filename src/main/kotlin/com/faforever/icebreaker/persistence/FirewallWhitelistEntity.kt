@@ -11,6 +11,7 @@ data class FirewallWhitelistEntity(
     val sessionId: String,
     // e.g. "88.217.205.180" or "2001:a61:9c01:11ab:c91e:c468:b262:3442"
     val allowedIp: String,
+    val createdAt: Instant,
     var deletedAt: Instant?,
 )
 
@@ -33,13 +34,17 @@ class FirewallWhitelistRepository(
                 userId,
                 sessionId,
                 allowedIp,
+                createdAt = clock.instant(),
                 deletedAt = null,
             ),
         )
     }
 
     /** Returns a list of all whitelists for [sessionId]. */
-    fun getForSessionId(sessionId: String): List<FirewallWhitelistEntity> = allowedIps.filter { it.sessionId == sessionId && it.deletedAt == null }
+    fun getForSessionId(sessionId: String): List<FirewallWhitelistEntity> = getAllActive().filter { it.sessionId == sessionId }
+
+    /** Returns all active (non-deleted) whitelist entries. */
+    fun getAllActive(): List<FirewallWhitelistEntity> = allowedIps.filter { it.deletedAt == null }
 
     /** Removes all whitelists for [sessionId]. */
     fun removeSession(sessionId: String) {

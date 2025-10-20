@@ -44,6 +44,8 @@ quarkus:
   rest-client:
     loki:
       url: ${LOKI_BASE_URL:http://localhost:3100}
+    hetzner:
+      url: ${HETZNER_BASE_URL}
   swagger-ui:
     always-include: true
     path: "/q/swagger-ui"
@@ -139,6 +141,10 @@ rabbitmq-password: ${RABBITMQ_PASSWORD:banana}
           i8UgZE7+lTYKv7+4ujmgHw==
           -----END PRIVATE KEY-----
   quarkus:
+    arc:
+      selected-alternatives:
+        # Comment out to enable calling the Hetzner API in dev
+        - StubHetznerApiClient
     oidc:
      self-tenant:
        public-key: |-
@@ -167,6 +173,9 @@ rabbitmq-password: ${RABBITMQ_PASSWORD:banana}
   cloudflare:
     enabled: false
   quarkus:
+    arc:
+      selected-alternatives:
+        - StubHetznerApiClient
     oidc:
       auth-server-url: https://hydra.faforever.com
       self-tenant:

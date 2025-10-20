@@ -2,6 +2,7 @@ package com.faforever.icebreaker.service
 
 import com.faforever.icebreaker.persistence.FirewallWhitelistRepository
 import com.faforever.icebreaker.persistence.IceSessionRepository
+import com.faforever.icebreaker.service.hetzner.StubHetznerApiClient
 import com.faforever.icebreaker.util.FakeClock
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.security.TestSecurity
@@ -12,6 +13,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import org.assertj.core.api.Assertions.assertThat
+import org.eclipse.microprofile.rest.client.inject.RestClient
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
@@ -33,9 +35,14 @@ class SessionServiceTest {
     @Inject
     lateinit var clock: FakeClock
 
+    @Inject
+    @RestClient
+    lateinit var hetznerApi: StubHetznerApiClient
+
     @BeforeEach
     fun cleanDb() {
         iceSessionRepository.deleteAll()
+        hetznerApi.resetCallCount()
     }
 
     @TestSecurity(user = "testUser", roles = ["viewer"])
@@ -68,7 +75,11 @@ class SessionServiceTest {
         val start = clock.instant()
         service.getSession(201L, "1.2.3.4")
 
-        runBlocking { waitUntilSessionCreated(gameId = 201) }
+        runBlocking {
+            waitUntil {
+                iceSessionRepository.existsByGameId(201)
+            }
+        }
         clock.setNow(start + Duration.ofDays(14))
         service.cleanUpSessions()
 
@@ -88,20 +99,82 @@ class SessionServiceTest {
     fun `Whitelist expires after client closes WebRTC session`() {
         service.getSession(201L, "1.2.3.4")
 
-        runBlocking { waitUntilSessionCreated(gameId = 201) }
+        runBlocking {
+            waitUntil {
+                iceSessionRepository.existsByGameId(201)
+            }
+        }
         service.onMessageReceived(201, PeerClosingMessage(gameId = 201, senderId = 123))
 
         val allowedIps = firewallWhitelistRepository.getForSessionId("game/201")
         assertThat(allowedIps).isEmpty()
     }
 
-    // We create the session entity asynchronously, so this helper waits until
-    // the session with the specified ID exists.
-    private suspend fun waitUntilSessionCreated(gameId: Long) {
+    @TestSecurity(user = "testUser", roles = ["viewer"])
+    @JwtSecurity(
+        claims = [
+            Claim(key = "sub", value = "123"),
+            Claim(key = "scp", value = "[lobby]"),
+            Claim(key = "ext", value = """{"roles":["USER"],"gameId":201}"""),
+        ],
+    )
+    @Test
+    fun `Whitelist synced with hetzner firewall`() {
+        // Make multiple requests in quick succession
+        service.getSession(201L, "1.2.3.4")
+        service.getSession(201L, "2.3.4.5")
+
+        runBlocking {
+            waitUntil {
+                hetznerApi.callCount >= 1
+            }
+        }
+
+        // Expect exactly one request to be sent upstream due to rate-limiting
+        assertThat(hetznerApi.callCount).isEqualTo(1)
+    }
+
+    @TestSecurity(user = "testUser", roles = ["viewer"])
+    @JwtSecurity(
+        claims = [
+            Claim(key = "sub", value = "123"),
+            Claim(key = "scp", value = "[lobby]"),
+            Claim(key = "ext", value = """{"roles":["USER"],"gameId":202}"""),
+        ],
+    )
+    @Test
+    fun `Subsequent DB changes trigger another API call`() {
+        // First batch of requests
+        service.getSession(202L, "1.2.3.4")
+        service.getSession(202L, "2.3.4.5")
+
+        runBlocking {
+            waitUntil {
+                hetznerApi.callCount >= 1
+            }
+        }
+
+        assertThat(hetznerApi.callCount).isEqualTo(1)
+
+        // Second batch of requests after some time
+        service.getSession(202L, "3.4.5.6")
+
+        runBlocking {
+            waitUntil {
+                hetznerApi.callCount >= 2
+            }
+        }
+
+        // Should have made exactly 2 API calls total
+        assertThat(hetznerApi.callCount).isEqualTo(2)
+    }
+
+    // Polls the predicate until it returns true or a timeout expires.
+    private suspend fun waitUntil(pred: () -> Boolean) {
         val timeout = 5_000.milliseconds
         val checkInterval = 100.milliseconds
         withTimeoutOrNull(timeout) {
-            while (!iceSessionRepository.existsByGameId(gameId)) {
+            while (!pred()) {
                 delay(checkInterval)
             }
         }
