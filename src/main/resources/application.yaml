@@ -74,6 +74,10 @@ cloudflare:
 loki:
   app-identifier: "faf-pioneer"
   enabled: ${LOKI_ENABLED:true}
+hetzner:
+  firewall-id: ${HETZNER_FIREWALL_ID}
+  max-ips-per-rule: 100
+  api-key: ${HETZNER_API_KEY}
 smallrye:
   jwt:
     sign:
@@ -107,6 +111,9 @@ rabbitmq-password: ${RABBITMQ_PASSWORD:banana}
     enabled: ${XIRSYS_ENABLED:false}
   cloudflare:
     enabled: ${CLOUDFLARE_ENABLED:false}
+  hetzner:
+    max-ips-per-rule: 100
+    api-key: "fake"
   smallrye:
     jwt:
       sign:
@@ -143,8 +150,12 @@ rabbitmq-password: ${RABBITMQ_PASSWORD:banana}
   quarkus:
     arc:
       selected-alternatives:
-        # Comment out to enable calling the Hetzner API in dev
+        # Comment out to enable calling the Hetzner API in dev.
+        # You will need to set the HETZNER_BASE_URL environment variable.
         - StubHetznerApiClient
+    rest-client:
+      hetzner:
+        url: ${HETZNER_BASE_URL}
     oidc:
      self-tenant:
        public-key: |-
@@ -172,6 +183,8 @@ rabbitmq-password: ${RABBITMQ_PASSWORD:banana}
     enabled: false
   cloudflare:
     enabled: false
+  hetzner:
+    api-key: "fake"
   quarkus:
     arc:
       selected-alternatives:
