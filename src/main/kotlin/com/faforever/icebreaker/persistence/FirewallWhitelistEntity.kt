@@ -43,8 +43,8 @@ class FirewallWhitelistRepository(
     /** Returns a list of all whitelists for [sessionId]. */
     fun getForSessionId(sessionId: String): List<FirewallWhitelistEntity> = getAllActive().filter { it.sessionId == sessionId }
 
-    /** Returns all active (non-deleted) whitelist entries. */
-    fun getAllActive(): List<FirewallWhitelistEntity> = allowedIps.filter { it.deletedAt == null }
+    /** Returns all active (non-deleted) whitelist entries, in order of creation time. */
+    fun getAllActive(): List<FirewallWhitelistEntity> = allowedIps.filter { it.deletedAt == null }.sortedBy { it.createdAt }
 
     /** Removes all whitelists for [sessionId]. */
     fun removeSession(sessionId: String) {
@@ -62,6 +62,14 @@ class FirewallWhitelistRepository(
             if (it.sessionId == sessionId && it.userId == userId && it.deletedAt == null) {
                 it.deletedAt = clock.instant()
             }
+            it
+        }
+    }
+
+    /** Removes all whitelists. */
+    fun removeAll() {
+        allowedIps.replaceAll {
+            it.deletedAt = clock.instant()
             it
         }
     }
