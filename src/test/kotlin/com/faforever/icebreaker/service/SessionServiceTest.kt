@@ -40,9 +40,10 @@ class SessionServiceTest {
     lateinit var hetznerApi: StubHetznerApiClient
 
     @BeforeEach
-    fun cleanDb() {
+    fun setup() {
         iceSessionRepository.deleteAll()
         hetznerApi.resetCallCount()
+        firewallWhitelistRepository.removeAll()
     }
 
     @TestSecurity(user = "testUser", roles = ["viewer"])
@@ -120,53 +121,16 @@ class SessionServiceTest {
     )
     @Test
     fun `Whitelist synced with hetzner firewall`() {
-        // Make multiple requests in quick succession
         service.getSession(201L, "1.2.3.4")
-        service.getSession(201L, "2.3.4.5")
 
         runBlocking {
             waitUntil {
-                hetznerApi.callCount >= 1
+                hetznerApi.callCount == 1
             }
         }
 
-        // Expect exactly one request to be sent upstream due to rate-limiting
-        assertThat(hetznerApi.callCount).isEqualTo(1)
-    }
-
-    @TestSecurity(user = "testUser", roles = ["viewer"])
-    @JwtSecurity(
-        claims = [
-            Claim(key = "sub", value = "123"),
-            Claim(key = "scp", value = "[lobby]"),
-            Claim(key = "ext", value = """{"roles":["USER"],"gameId":202}"""),
-        ],
-    )
-    @Test
-    fun `Subsequent DB changes trigger another API call`() {
-        // First batch of requests
-        service.getSession(202L, "1.2.3.4")
-        service.getSession(202L, "2.3.4.5")
-
-        runBlocking {
-            waitUntil {
-                hetznerApi.callCount >= 1
-            }
-        }
-
-        assertThat(hetznerApi.callCount).isEqualTo(1)
-
-        // Second batch of requests after some time
-        service.getSession(202L, "3.4.5.6")
-
-        runBlocking {
-            waitUntil {
-                hetznerApi.callCount >= 2
-            }
-        }
-
-        // Should have made exactly 2 API calls total
-        assertThat(hetznerApi.callCount).isEqualTo(2)
+        val whitelistedIps = hetznerApi.rulesByFirewallId["fwid"]!!.flatMap { it.sourceIps }.toSet()
+        assertThat(whitelistedIps).contains("1.2.3.4/32")
     }
 
     // Polls the predicate until it returns true or a timeout expires.

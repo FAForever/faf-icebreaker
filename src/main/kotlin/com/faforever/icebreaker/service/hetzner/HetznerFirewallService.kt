@@ -8,11 +8,13 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.time.Clock
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.jvm.optionals.getOrNull
 
 private val LOG: Logger = LoggerFactory.getLogger(HetznerFirewallService::class.java)
 
 @Singleton
 class HetznerFirewallService(
+    private val hetznerProperties: HetznerProperties,
     private val repository: FirewallWhitelistRepository,
     @RestClient private val client: HetznerApiClient,
     private val clock: Clock,
@@ -25,7 +27,6 @@ class HetznerFirewallService(
         LOG.debug("Whitelisting IP {} for session {} in Hetzner cloud firewall", ipAddress, sessionId)
         repository.insert(sessionId, userId, ipAddress)
         lastDbModificationTime.set(clock.instant().epochSecond)
-        // TODO(#132): metric for the number of whitelisted sessions
     }
 
     /** Removes all whitelists for session [sessionId]. */
@@ -44,6 +45,8 @@ class HetznerFirewallService(
 
     @Scheduled(every = "1s", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     fun syncFirewallWithHetzner() {
+        val firewall = hetznerProperties.firewallId().getOrNull() ?: return
+
         val lastDbModTime = lastDbModificationTime.get()
 
         if (lastDbModTime < lastUpstreamRequestTime) {
@@ -55,12 +58,47 @@ class HetznerFirewallService(
             return
         }
 
-        val activeEntries = repository.getAllActive()
-        LOG.debug("Syncing {} active firewall entries with Hetzner API", activeEntries.size)
+        val sourceIps = repository.getAllActive().map { "${it.allowedIp}/32" }
+        val blockSize = hetznerProperties.maxIpsPerRule()
+        // Split the list of all source IPs to whitelist into blocks of the maximum supported size.
+        val sourceBlocks: List<List<String>> = sourceIps.windowed(size = blockSize, step = blockSize, partialWindows = true)
+        val rules =
+            sourceBlocks.flatMap { sources ->
+                listOf(
+                    // We don't specify the ports for either rule, because the port might
+                    // be different on each TURN server.
+                    FirewallRule(
+                        direction = Direction.IN,
+                        sourceIps = sources,
+                        protocol = Protocol.TCP,
+                    ),
+                    FirewallRule(
+                        direction = Direction.IN,
+                        sourceIps = sources,
+                        protocol = Protocol.UDP,
+                    ),
+                )
+            }
+        LOG.info("Syncing {} active whitelist IPs to Hetzner firewall {}", sourceIps.size, firewall)
+        val request = SetFirewallRulesRequest(rules)
+        LOG.debug("Hetzner request summary: rules={}, totalSourceIps={}", rules.size, sourceIps.size)
+        // It's important that an empty list of actions counts as success, since we might
+        // re-apply the current whitelist without changes due to our "last applied" timestamp
+        // only having second granularity.
+        var response = try {
+            client.setFirewallRules(firewall, request)
+        } catch (e: Exception) {
+            LOG.error("Failed to update Hetzner firewall rules: {}", e)
+            return
+        }
 
-        // TODO(#132): call the API with real firewall rules
-        client.setFirewallRules("firewall-id")
-        lastUpstreamRequestTime = clock.instant().epochSecond
-        LOG.debug("Successfully updated Hetzner firewall rules")
+        val success = response.actions.all { it.error == null }
+
+        if (success) {
+            lastUpstreamRequestTime = clock.instant().epochSecond
+            LOG.info("Successfully updated Hetzner firewall rules")
+        } else {
+            LOG.error("Failed to update Hetzner firewall rules")
+        }
     }
 }
