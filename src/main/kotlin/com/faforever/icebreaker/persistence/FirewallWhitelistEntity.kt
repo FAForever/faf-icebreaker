@@ -1,76 +1,81 @@
 package com.faforever.icebreaker.persistence
 
-import jakarta.enterprise.context.ApplicationScoped
+import io.quarkus.hibernate.orm.panache.kotlin.PanacheEntityBase
+import io.quarkus.hibernate.orm.panache.kotlin.PanacheRepository
+import jakarta.inject.Singleton
+import jakarta.persistence.Column
+import jakarta.persistence.Entity
+import jakarta.persistence.GeneratedValue
+import jakarta.persistence.GenerationType
+import jakarta.persistence.Id
+import jakarta.persistence.Table
+import jakarta.transaction.Transactional
 import java.time.Clock
 import java.time.Instant
 
-// TODO(#132) - store FirewallWhitelistEntity in the DB as an actual entity
+@Entity
+@Table(name = "firewall_whitelist")
 data class FirewallWhitelistEntity(
-    val id: Long,
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    val id: Long = 0,
     val userId: Long,
     val sessionId: String,
-    // e.g. "88.217.205.180" or "2001:a61:9c01:11ab:c91e:c468:b262:3442"
+    @Column(length = 45)
     val allowedIp: String,
+    @Column(updatable = false)
     val createdAt: Instant,
     var deletedAt: Instant?,
-)
+) : PanacheEntityBase
 
-@ApplicationScoped
-class FirewallWhitelistRepository(
+interface FirewallWhitelistRepository {
+    fun insert(sessionId: String, userId: Long, allowedIp: String)
+    fun getForSessionId(sessionId: String): List<FirewallWhitelistEntity>
+    fun getAllActive(): List<FirewallWhitelistEntity>
+    fun removeSession(sessionId: String)
+    fun removeSessionUser(sessionId: String, userId: Long)
+    fun removeAll()
+}
+
+@Singleton
+@Transactional
+class FirewallWhitelistPanacheRepository(
     private val clock: Clock,
-) {
-    private val allowedIps: MutableList<FirewallWhitelistEntity> = mutableListOf()
+) : PanacheRepository<FirewallWhitelistEntity>,
+    FirewallWhitelistRepository {
 
-    /**
-     * Whitelists [allowedIp] for the session [sessionId].
-     *
-     * [allowedIp] is e.g. "88.217.205.180".
-     */
-    fun insert(sessionId: String, userId: Long, allowedIp: String) {
-        val lastId = allowedIps.map { it.id }.maxOrNull() ?: 0
-        allowedIps.add(
+    override fun insert(sessionId: String, userId: Long, allowedIp: String) {
+        persist(
             FirewallWhitelistEntity(
-                id = lastId + 1,
-                userId,
-                sessionId,
-                allowedIp,
+                userId = userId,
+                sessionId = sessionId,
+                allowedIp = allowedIp,
                 createdAt = clock.instant(),
                 deletedAt = null,
             ),
         )
     }
 
-    /** Returns a list of all whitelists for [sessionId]. */
-    fun getForSessionId(sessionId: String): List<FirewallWhitelistEntity> = getAllActive().filter { it.sessionId == sessionId }
+    override fun getForSessionId(sessionId: String): List<FirewallWhitelistEntity> =
+        find("sessionId = ?1 and deletedAt is null", sessionId).list()
 
-    /** Returns all active (non-deleted) whitelist entries, in order of creation time. */
-    fun getAllActive(): List<FirewallWhitelistEntity> = allowedIps.filter { it.deletedAt == null }.sortedBy { it.createdAt }
+    override fun getAllActive(): List<FirewallWhitelistEntity> =
+        find("deletedAt is null order by createdAt").list()
 
-    /** Removes all whitelists for [sessionId]. */
-    fun removeSession(sessionId: String) {
-        allowedIps.replaceAll {
-            if (it.sessionId == sessionId && it.deletedAt == null) {
-                it.deletedAt = clock.instant()
-            }
-            it
-        }
+    override fun removeSession(sessionId: String) {
+        update("deletedAt = ?1 where sessionId = ?2 and deletedAt is null", clock.instant(), sessionId)
     }
 
-    /** Removes the whitelist for user [userId] in session [sessionId]. */
-    fun removeSessionUser(sessionId: String, userId: Long) {
-        allowedIps.replaceAll {
-            if (it.sessionId == sessionId && it.userId == userId && it.deletedAt == null) {
-                it.deletedAt = clock.instant()
-            }
-            it
-        }
+    override fun removeSessionUser(sessionId: String, userId: Long) {
+        update(
+            "deletedAt = ?1 where sessionId = ?2 and userId = ?3 and deletedAt is null",
+            clock.instant(),
+            sessionId,
+            userId,
+        )
     }
 
-    /** Removes all whitelists. */
-    fun removeAll() {
-        allowedIps.replaceAll {
-            it.deletedAt = clock.instant()
-            it
-        }
+    override fun removeAll() {
+        update("deletedAt = ?1 where deletedAt is null", clock.instant())
     }
 }
