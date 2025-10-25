@@ -6,11 +6,34 @@ import jakarta.inject.Singleton
 import org.eclipse.microprofile.rest.client.inject.RestClient
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import java.net.Inet4Address
+import java.net.Inet6Address
+import java.net.InetAddress
 import java.time.Clock
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.jvm.optionals.getOrNull
 
 private val LOG: Logger = LoggerFactory.getLogger(HetznerFirewallService::class.java)
+
+/**
+ * Converts an IP address string to CIDR notation.
+ *
+ * Returns null if the IP address cannot be parsed or is of unknown type.
+ */
+private fun String.toCidr(): String? = try {
+    val inetAddress = InetAddress.getByName(this)
+    when (inetAddress) {
+        is Inet4Address -> "$this/32"
+        is Inet6Address -> "$this/128"
+        else -> {
+            LOG.warn("Unknown IP address type for {}", this)
+            null
+        }
+    }
+} catch (e: Exception) {
+    LOG.warn("Failed to parse IP address {}: {}", this, e.message)
+    null
+}
 
 @Singleton
 class HetznerFirewallService(
@@ -58,7 +81,9 @@ class HetznerFirewallService(
             return
         }
 
-        val sourceIps = repository.getAllActive().map { "${it.allowedIp}/32" }
+        val sourceIps = repository.getAllActive().mapNotNull { entry ->
+            entry.allowedIp.toCidr()
+        }
         val blockSize = hetznerProperties.maxIpsPerRule()
         // Split the list of all source IPs to whitelist into blocks of the maximum supported size.
         val sourceBlocks: List<List<String>> = sourceIps.windowed(size = blockSize, step = blockSize, partialWindows = true)
