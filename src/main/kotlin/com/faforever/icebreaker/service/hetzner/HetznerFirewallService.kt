@@ -82,8 +82,8 @@ class HetznerFirewallService(
         }
 
         val sourceIps = repository.getAllActive().mapNotNull { entry ->
-            entry.allowedIp.toCidr()
-        }
+            entry.allowedIp.trim().toCidr()
+        }.distinct()
         val sourceBlocks: List<List<String>> = sourceIps.chunked(hetznerProperties.maxIpsPerRule())
         val rules =
             sourceBlocks.flatMap { sources ->
