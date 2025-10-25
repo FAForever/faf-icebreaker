@@ -1,5 +1,6 @@
 package com.faforever.icebreaker.service.hetzner
 
+import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.FirewallRule
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.inject.Alternative
 import org.eclipse.microprofile.rest.client.inject.RestClient

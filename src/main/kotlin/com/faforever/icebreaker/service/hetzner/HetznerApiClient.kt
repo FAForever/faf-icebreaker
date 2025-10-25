@@ -1,4 +1,5 @@
 package com.faforever.icebreaker.service.hetzner
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.ws.rs.Consumes
@@ -12,37 +13,35 @@ import org.eclipse.microprofile.rest.client.inject.RegisterRestClient
 
 /**
  * Request object for /firewalls/{id}/actions/set_rules.
+ * We only include the fields that we set - see Hetzner docs for the full list.
  *
  * Documented at https://docs.hetzner.cloud/reference/cloud#firewall-actions-set-rules
  */
 data class SetFirewallRulesRequest(
     val rules: List<FirewallRule>,
-)
-
-// We only include the fields that we set - see Hetzner docs for the full list.
-data class FirewallRule(
-    val direction: Direction,
-    val sourceIps: List<String> = emptyList(),
-    val protocol: Protocol,
 ) {
-    @JsonProperty("source_ips")
-    val sourceIpsJson = sourceIps
-}
+    data class FirewallRule(
+        val direction: Direction,
+        @get:JsonProperty("source_ips")
+        val sourceIps: List<String> = emptyList(),
+        val protocol: Protocol,
+    ) {
+        enum class Direction {
+            @JsonProperty("in")
+            IN,
 
-enum class Direction {
-    @JsonProperty("in")
-    IN,
+            @JsonProperty("out")
+            OUT,
+        }
 
-    @JsonProperty("out")
-    OUT,
-}
+        enum class Protocol {
+            @JsonProperty("tcp")
+            TCP,
 
-enum class Protocol {
-    @JsonProperty("tcp")
-    TCP,
-
-    @JsonProperty("udp")
-    UDP,
+            @JsonProperty("udp")
+            UDP,
+        }
+    }
 }
 
 /**
@@ -50,40 +49,44 @@ enum class Protocol {
  *
  * Documented at https://docs.hetzner.cloud/reference/cloud#firewall-actions-set-rules
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 data class SetFirewallRulesResponse(
     val actions: List<Action>,
-)
+) {
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class Action(
+        val id: Long,
+        val command: String,
+        val status: Status,
+        val progress: Int,
+        val started: String,
+        val finished: String?,
+        val resources: List<Resource>,
+        val error: Error?,
+    ) {
+        enum class Status {
+            @JsonProperty("running")
+            RUNNING,
 
-data class Action(
-    val id: Long,
-    val command: String,
-    val status: ActionStatus,
-    val progress: Int,
-    val started: String,
-    val finished: String?,
-    val resources: List<ActionResource>,
-    val error: ActionError?,
-)
+            @JsonProperty("success")
+            SUCCESS,
 
-data class ActionResource(
-    val id: Long,
-    val type: String,
-)
+            @JsonProperty("error")
+            ERROR,
+        }
 
-data class ActionError(
-    val code: String,
-    val message: String,
-)
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        data class Resource(
+            val id: Long,
+            val type: String,
+        )
 
-enum class ActionStatus {
-    @JsonProperty("running")
-    RUNNING,
-
-    @JsonProperty("success")
-    SUCCESS,
-
-    @JsonProperty("error")
-    ERROR,
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        data class Error(
+            val code: String,
+            val message: String,
+        )
+    }
 }
 
 @ApplicationScoped

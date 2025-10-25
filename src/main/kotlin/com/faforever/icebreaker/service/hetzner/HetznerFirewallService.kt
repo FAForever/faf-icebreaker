@@ -1,6 +1,9 @@
 package com.faforever.icebreaker.service.hetzner
 
 import com.faforever.icebreaker.persistence.FirewallWhitelistRepository
+import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.FirewallRule
+import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.FirewallRule.Direction
+import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.FirewallRule.Protocol
 import io.quarkus.scheduler.Scheduled
 import jakarta.inject.Singleton
 import org.eclipse.microprofile.rest.client.inject.RestClient
