@@ -123,11 +123,11 @@ class SessionServiceTest {
 
         runBlocking {
             waitUntil {
-                hetznerApi.callCount == 1
+                hetznerApi.getCallCount() == 1
             }
         }
 
-        val whitelistedIps = hetznerApi.rulesByFirewallId["fwid"]!!.flatMap { it.sourceIps }.toSet()
+        val whitelistedIps = hetznerApi.getRulesByFirewallId("fwid")!!.flatMap { it.sourceIps }.toSet()
         assertThat(whitelistedIps).contains("1.2.3.4/32")
     }
 }

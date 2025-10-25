@@ -57,9 +57,9 @@ class HetznerFirewallServiceTest {
     @Test
     fun `Add whitelist`() {
         service.whitelistIpForSession("game/200", userId = 123, ipAddress = "1.2.3.4")
-        runBlocking { waitUntil { hetznerApi.callCount == 1 } }
+        runBlocking { waitUntil { hetznerApi.getCallCount() == 1 } }
 
-        val allowedIps = hetznerApi.rulesByFirewallId["fwid"]!!.allSourceIps()
+        val allowedIps = hetznerApi.getRulesByFirewallId("fwid")!!.allSourceIps()
         assertThat(allowedIps).isEqualTo(setOf("1.2.3.4/32"))
     }
 
@@ -67,30 +67,30 @@ class HetznerFirewallServiceTest {
     fun `Add whitelist de-duplicates`() {
         service.whitelistIpForSession("game/200", userId = 123, ipAddress = "1.2.3.4")
         service.whitelistIpForSession("game/201", userId = 123, ipAddress = "1.2.3.4")
-        runBlocking { waitUntil { hetznerApi.callCount == 1 } }
+        runBlocking { waitUntil { hetznerApi.getCallCount() == 1 } }
 
-        val allowedIps = hetznerApi.rulesByFirewallId["fwid"]!!.allSourceIps()
+        val allowedIps = hetznerApi.getRulesByFirewallId("fwid")!!.allSourceIps()
         assertThat(allowedIps).isEqualTo(setOf("1.2.3.4/32"))
     }
 
     @Test
     fun `Add whitelist IPv6`() {
         service.whitelistIpForSession("game/200", userId = 123, ipAddress = "abcd::")
-        runBlocking { waitUntil { hetznerApi.callCount == 1 } }
+        runBlocking { waitUntil { hetznerApi.getCallCount() == 1 } }
 
-        val allowedIps = hetznerApi.rulesByFirewallId["fwid"]!!.allSourceIps()
+        val allowedIps = hetznerApi.getRulesByFirewallId("fwid")!!.allSourceIps()
         assertThat(allowedIps).isEqualTo(setOf("abcd::/128"))
     }
 
     @Test
     fun `Remove user whitelist`() {
         service.whitelistIpForSession("game/200", userId = 123, ipAddress = "1.2.3.4")
-        runBlocking { waitUntil { hetznerApi.callCount == 1 } }
+        runBlocking { waitUntil { hetznerApi.getCallCount() == 1 } }
 
         service.removeWhitelistForSessionUser(123, "game/200")
-        runBlocking { waitUntil { hetznerApi.callCount == 2 } }
+        runBlocking { waitUntil { hetznerApi.getCallCount() == 2 } }
 
-        val allowedIps = hetznerApi.rulesByFirewallId["fwid"]!!.allSourceIps()
+        val allowedIps = hetznerApi.getRulesByFirewallId("fwid")!!.allSourceIps()
         assertThat(allowedIps).isEmpty()
     }
 
@@ -98,12 +98,12 @@ class HetznerFirewallServiceTest {
     fun `Remove session whitelist`() {
         service.whitelistIpForSession("game/200", userId = 123, ipAddress = "1.2.3.4")
         service.whitelistIpForSession("game/200", userId = 234, ipAddress = "2.3.4.5")
-        runBlocking { waitUntil { hetznerApi.callCount == 1 } }
+        runBlocking { waitUntil { hetznerApi.getCallCount() == 1 } }
 
         service.removeWhitelistsForSession("game/200")
-        runBlocking { waitUntil { hetznerApi.callCount == 2 } }
+        runBlocking { waitUntil { hetznerApi.getCallCount() == 2 } }
 
-        val allowedIps = hetznerApi.rulesByFirewallId["fwid"]!!.allSourceIps()
+        val allowedIps = hetznerApi.getRulesByFirewallId("fwid")!!.allSourceIps()
         assertThat(allowedIps).isEmpty()
     }
 
@@ -115,13 +115,13 @@ class HetznerFirewallServiceTest {
 
         runBlocking {
             waitUntil {
-                hetznerApi.callCount == 1
+                hetznerApi.getCallCount() == 1
             }
         }
 
-        var allowedIps = hetznerApi.rulesByFirewallId["fwid"]!!.allSourceIps()
+        var allowedIps = hetznerApi.getRulesByFirewallId("fwid")!!.allSourceIps()
         assertThat(allowedIps).hasSize(2)
-        assertThat(hetznerApi.callCount).isEqualTo(1)
+        assertThat(hetznerApi.getCallCount()).isEqualTo(1)
 
         service.whitelistIpForSession("game/201", userId = 345, "3.4.5.6")
         service.whitelistIpForSession("game/202", userId = 456, "4.5.6.7")
@@ -129,13 +129,13 @@ class HetznerFirewallServiceTest {
 
         runBlocking {
             waitUntil {
-                hetznerApi.callCount == 2
+                hetznerApi.getCallCount() == 2
             }
         }
 
-        allowedIps = hetznerApi.rulesByFirewallId["fwid"]!!.allSourceIps()
+        allowedIps = hetznerApi.getRulesByFirewallId("fwid")!!.allSourceIps()
         assertThat(allowedIps).hasSize(3)
-        assertThat(hetznerApi.callCount).isEqualTo(2)
+        assertThat(hetznerApi.getCallCount()).isEqualTo(2)
     }
 
     @Test
@@ -147,11 +147,11 @@ class HetznerFirewallServiceTest {
 
         runBlocking {
             waitUntil {
-                hetznerApi.callCount == 1
+                hetznerApi.getCallCount() == 1
             }
         }
 
-        assertThat(hetznerApi.rulesByFirewallId["fwid"]).isEqualTo(
+        assertThat(hetznerApi.getRulesByFirewallId("fwid")).isEqualTo(
             listOf(
                 FirewallRule(IN, listOf("1.2.3.4/32", "2.3.4.5/32", "3.4.5.6/32"), TCP),
                 FirewallRule(IN, listOf("1.2.3.4/32", "2.3.4.5/32", "3.4.5.6/32"), UDP),
