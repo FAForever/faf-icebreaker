@@ -84,9 +84,7 @@ class HetznerFirewallService(
         val sourceIps = repository.getAllActive().mapNotNull { entry ->
             entry.allowedIp.toCidr()
         }
-        val blockSize = hetznerProperties.maxIpsPerRule()
-        // Split the list of all source IPs to whitelist into blocks of the maximum supported size.
-        val sourceBlocks: List<List<String>> = sourceIps.windowed(size = blockSize, step = blockSize, partialWindows = true)
+        val sourceBlocks: List<List<String>> = sourceIps.chunked(hetznerProperties.maxIpsPerRule())
         val rules =
             sourceBlocks.flatMap { sources ->
                 listOf(
