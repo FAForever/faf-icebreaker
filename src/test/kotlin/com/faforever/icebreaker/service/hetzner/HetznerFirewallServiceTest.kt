@@ -8,22 +8,20 @@ import com.faforever.icebreaker.service.hetzner.HetznerProperties
 import com.faforever.icebreaker.service.hetzner.Protocol.TCP
 import com.faforever.icebreaker.service.hetzner.Protocol.UDP
 import com.faforever.icebreaker.service.hetzner.StubHetznerApiClient
+import com.faforever.icebreaker.sync.waitUntil
 import io.quarkus.test.Mock
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.context.Dependent
 import jakarta.enterprise.inject.Produces
 import jakarta.inject.Inject
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeoutOrNull
 import org.assertj.core.api.Assertions.assertThat
 import org.eclipse.microprofile.rest.client.inject.RestClient
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import java.util.Optional
-import kotlin.time.Duration.Companion.milliseconds
 
 @Dependent
 class HetznerFirewallServiceTestConfig {
@@ -161,17 +159,6 @@ class HetznerFirewallServiceTest {
                 FirewallRule(IN, listOf("4.5.6.7/32"), UDP),
             ),
         )
-    }
-
-    // Polls the predicate until it returns true or a timeout expires.
-    private suspend fun waitUntil(pred: () -> Boolean) {
-        val timeout = 5_000.milliseconds
-        val checkInterval = 100.milliseconds
-        withTimeoutOrNull(timeout) {
-            while (!pred()) {
-                delay(checkInterval)
-            }
-        }
     }
 }
 
