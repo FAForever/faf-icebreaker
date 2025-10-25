@@ -1,12 +1,12 @@
 package com.faforever.icebreaker.service
 
 import com.faforever.icebreaker.persistence.FirewallWhitelistRepository
-import com.faforever.icebreaker.service.hetzner.Direction.IN
-import com.faforever.icebreaker.service.hetzner.FirewallRule
 import com.faforever.icebreaker.service.hetzner.HetznerFirewallService
 import com.faforever.icebreaker.service.hetzner.HetznerProperties
-import com.faforever.icebreaker.service.hetzner.Protocol.TCP
-import com.faforever.icebreaker.service.hetzner.Protocol.UDP
+import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.FirewallRule
+import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.FirewallRule.Direction.IN
+import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.FirewallRule.Protocol.TCP
+import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.FirewallRule.Protocol.UDP
 import com.faforever.icebreaker.service.hetzner.StubHetznerApiClient
 import com.faforever.icebreaker.sync.waitUntil
 import io.quarkus.test.Mock
