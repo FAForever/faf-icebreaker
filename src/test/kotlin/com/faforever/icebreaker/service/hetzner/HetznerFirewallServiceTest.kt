@@ -66,6 +66,15 @@ class HetznerFirewallServiceTest {
     }
 
     @Test
+    fun `Add whitelist IPv6`() {
+        service.whitelistIpForSession("game/200", userId = 123, ipAddress = "abcd::")
+        runBlocking { waitUntil { hetznerApi.callCount == 1 } }
+
+        val allowedIps = hetznerApi.rulesByFirewallId["fwid"]!!.allSourceIps()
+        assertThat(allowedIps).isEqualTo(setOf("abcd::/128"))
+    }
+
+    @Test
     fun `Remove user whitelist`() {
         service.whitelistIpForSession("game/200", userId = 123, ipAddress = "1.2.3.4")
         runBlocking { waitUntil { hetznerApi.callCount == 1 } }
