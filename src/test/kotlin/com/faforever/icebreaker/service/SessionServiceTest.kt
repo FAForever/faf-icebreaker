@@ -3,22 +3,20 @@ package com.faforever.icebreaker.service
 import com.faforever.icebreaker.persistence.FirewallWhitelistRepository
 import com.faforever.icebreaker.persistence.IceSessionRepository
 import com.faforever.icebreaker.service.hetzner.StubHetznerApiClient
+import com.faforever.icebreaker.sync.waitUntil
 import com.faforever.icebreaker.util.FakeClock
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.security.TestSecurity
 import io.quarkus.test.security.jwt.Claim
 import io.quarkus.test.security.jwt.JwtSecurity
 import jakarta.inject.Inject
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeoutOrNull
 import org.assertj.core.api.Assertions.assertThat
 import org.eclipse.microprofile.rest.client.inject.RestClient
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import java.time.Duration
-import kotlin.time.Duration.Companion.milliseconds
 
 @QuarkusTest
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -131,16 +129,5 @@ class SessionServiceTest {
 
         val whitelistedIps = hetznerApi.rulesByFirewallId["fwid"]!!.flatMap { it.sourceIps }.toSet()
         assertThat(whitelistedIps).contains("1.2.3.4/32")
-    }
-
-    // Polls the predicate until it returns true or a timeout expires.
-    private suspend fun waitUntil(pred: () -> Boolean) {
-        val timeout = 5_000.milliseconds
-        val checkInterval = 100.milliseconds
-        withTimeoutOrNull(timeout) {
-            while (!pred()) {
-                delay(checkInterval)
-            }
-        }
     }
 }
