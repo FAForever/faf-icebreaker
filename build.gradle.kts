@@ -49,6 +49,7 @@ dependencies {
     testImplementation("org.assertj:assertj-core:3.27.6")
     testImplementation("io.quarkus:quarkus-test-security")
     testImplementation("io.quarkus:quarkus-test-security-jwt")
+    testImplementation("io.quarkus:quarkus-junit5-mockito")
 }
 
 group = "com.faforever.icebreaker"
