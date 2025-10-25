@@ -13,20 +13,20 @@ import java.util.concurrent.atomic.AtomicInteger
 @Alternative
 @ApplicationScoped
 class StubHetznerApiClient : HetznerApiClient {
-    private val _callCount = AtomicInteger(0)
-    private val _rulesByFirewallId: MutableMap<String, List<FirewallRule>> = ConcurrentHashMap()
+    private val callCount = AtomicInteger(0)
+    private val rulesByFirewallId: MutableMap<String, List<FirewallRule>> = ConcurrentHashMap()
 
     override fun setFirewallRules(id: String, request: SetFirewallRulesRequest): SetFirewallRulesResponse {
-        _rulesByFirewallId[id] = request.rules
-        _callCount.incrementAndGet()
+        rulesByFirewallId[id] = request.rules
+        callCount.incrementAndGet()
         return SetFirewallRulesResponse(listOf())
     }
 
-    val callCount get() = _callCount.get()
+    fun getCallCount(): Int = callCount.get()
 
-    val rulesByFirewallId: Map<String, List<FirewallRule>> get() = _rulesByFirewallId
+    fun getRulesByFirewallId(id: String) = rulesByFirewallId[id]
 
     fun resetCallCount() {
-        _callCount.set(0)
+        callCount.set(0)
     }
 }
