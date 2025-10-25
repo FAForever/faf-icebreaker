@@ -66,6 +66,16 @@ class HetznerFirewallServiceTest {
     }
 
     @Test
+    fun `Add whitelist de-duplicates`() {
+        service.whitelistIpForSession("game/200", userId = 123, ipAddress = "1.2.3.4")
+        service.whitelistIpForSession("game/201", userId = 123, ipAddress = "1.2.3.4")
+        runBlocking { waitUntil { hetznerApi.callCount == 1 } }
+
+        val allowedIps = hetznerApi.rulesByFirewallId["fwid"]!!.allSourceIps()
+        assertThat(allowedIps).isEqualTo(setOf("1.2.3.4/32"))
+    }
+
+    @Test
     fun `Add whitelist IPv6`() {
         service.whitelistIpForSession("game/200", userId = 123, ipAddress = "abcd::")
         runBlocking { waitUntil { hetznerApi.callCount == 1 } }
