@@ -87,7 +87,7 @@ class SessionService(
 
         val sessionId = buildSessionId(gameId)
 
-        val currentUserId = currentUserService.getCurrentUserId() ?: throw ForbiddenException("Unauthenticated")
+        val currentUserId = currentUserService.requireCurrentUserId()
         val currentUserIp = currentUserService.getCurrentUserIp()
         val servers =
             activeSessionHandlers.flatMap {
@@ -147,7 +147,7 @@ class SessionService(
     }
 
     fun listenForEventMessages(gameId: Long): Multi<EventMessage> {
-        val userId = currentUserService.getCurrentUserId()!!
+        val userId = currentUserService.requireCurrentUserId()
 
         // Use Uni to wrap the blocking repository calls
         val userStatsUni = Uni.createFrom().item {
@@ -174,7 +174,8 @@ class SessionService(
             }
         }.flatMap {
             // Send message after processing stats persistence or increment
-            Uni.createFrom().completionStage(rabbitmqEventEmitter.send(ConnectedMessage(gameId = gameId, senderId = userId)))
+            Uni.createFrom()
+                .completionStage(rabbitmqEventEmitter.send(ConnectedMessage(gameId = gameId, senderId = userId)))
         }.onItem().transformToMulti {
             LOG.debug("Subscription to gameId $gameId events established")
 
@@ -193,9 +194,9 @@ class SessionService(
             "gameId $gameId from endpoint does not match gameId ${eventMessage.gameId} in candidateMessage"
         }
 
-        val currentUserId = currentUserService.getCurrentUserId()
-        check(eventMessage.senderId == currentUserId) {
-            "current user id $currentUserId from endpoint does not match sourceId ${eventMessage.senderId} in candidateMessage"
+        val currentUserId = currentUserService.requireCurrentUserId()
+        if (eventMessage.senderId != currentUserId) {
+            throw ForbiddenException("Current user id $currentUserId from endpoint does not match sourceId ${eventMessage.senderId} in candidateMessage")
         }
 
         val sessionId = buildSessionId(gameId)
@@ -214,7 +215,7 @@ class SessionService(
     }
 
     fun onLogsPushed(gameId: Long, logs: List<LogMessage>) {
-        val currentUserId = currentUserService.getCurrentUserId()!!
+        val currentUserId = currentUserService.requireCurrentUserId()
 
         LOG.debug("Received logs for gameId {} from userId {}", gameId, currentUserId)
 
