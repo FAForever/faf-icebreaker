@@ -56,7 +56,7 @@ class SessionServiceTest {
 
         iceSessionRepository.deleteAll()
         hetznerApi.resetCallCount()
-        firewallWhitelistRepository.removeAll()
+        firewallWhitelistRepository.deleteAll()
     }
 
     @TestSecurity(user = "testUser", roles = ["viewer"])

@@ -1,5 +1,6 @@
 package com.faforever.icebreaker.service.hetzner
 
+import com.faforever.icebreaker.persistence.FirewallWhitelistEntity
 import com.faforever.icebreaker.persistence.FirewallWhitelistRepository
 import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.FirewallRule
 import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.FirewallRule.Direction
@@ -51,21 +52,29 @@ class HetznerFirewallService(
     /** Whitelists [ipAddress] for session [sessionId]. */
     fun whitelistIpForSession(sessionId: String, userId: Long, ipAddress: String) {
         LOG.debug("Whitelisting IP {} for session {} in Hetzner cloud firewall", ipAddress, sessionId)
-        repository.insert(sessionId, userId, ipAddress)
+        repository.persist(
+            FirewallWhitelistEntity(
+                userId = userId,
+                sessionId = sessionId,
+                allowedIp = ipAddress,
+                createdAt = clock.instant(),
+                deletedAt = null,
+            ),
+        )
         lastDbModificationTime.set(clock.instant().epochSecond)
     }
 
     /** Removes all whitelists for session [sessionId]. */
     fun removeWhitelistsForSession(sessionId: String) {
         LOG.debug("Removing whitelist for session {}", sessionId)
-        repository.removeSession(sessionId)
+        repository.markSessionAsDeleted(sessionId)
         lastDbModificationTime.set(clock.instant().epochSecond)
     }
 
     /** Removes only the whitelist for user [userId] in session [sessionId]. */
     fun removeWhitelistForSessionUser(userId: Long, sessionId: String) {
         LOG.debug("Removing user {}'s whitelist for session {}", userId, sessionId)
-        repository.removeSessionUser(sessionId, userId)
+        repository.markSessionUserAsDeleted(sessionId, userId)
         lastDbModificationTime.set(clock.instant().epochSecond)
     }
 
@@ -111,10 +120,10 @@ class HetznerFirewallService(
         // It's important that an empty list of actions counts as success, since we might
         // re-apply the current whitelist without changes due to our "last applied" timestamp
         // only having second granularity.
-        var response = try {
+        val response = try {
             client.setFirewallRules(firewall, request)
         } catch (e: Exception) {
-            LOG.error("Failed to update Hetzner firewall rules: {}", e)
+            LOG.error("Failed to update Hetzner firewall rules", e)
             return
         }
 
