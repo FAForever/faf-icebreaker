@@ -3,22 +3,23 @@ package com.faforever.icebreaker.persistence
 import io.quarkus.test.Mock
 import jakarta.enterprise.context.ApplicationScoped
 import java.time.Clock
+import java.util.concurrent.CopyOnWriteArrayList
 
 @Mock
 @ApplicationScoped
 class InMemoryFirewallWhitelistRepository(
     private val clock: Clock,
 ) : FirewallWhitelistRepository {
-    private val allowedIps: MutableList<FirewallWhitelistEntity> = mutableListOf()
+    private val allowedIps: MutableList<FirewallWhitelistEntity> = CopyOnWriteArrayList()
 
-    override fun insert(sessionId: String, userId: Long, allowedIp: String) {
-        val lastId = allowedIps.map { it.id }.maxOrNull() ?: 0
+    override fun persist(entity: FirewallWhitelistEntity) {
+        val lastId = allowedIps.maxOfOrNull { it.id } ?: 0
         allowedIps.add(
             FirewallWhitelistEntity(
                 id = lastId + 1,
-                userId = userId,
-                sessionId = sessionId,
-                allowedIp = allowedIp,
+                userId = entity.userId,
+                sessionId = entity.sessionId,
+                allowedIp = entity.allowedIp,
                 createdAt = clock.instant(),
                 deletedAt = null,
             ),
@@ -29,7 +30,7 @@ class InMemoryFirewallWhitelistRepository(
 
     override fun getAllActive(): List<FirewallWhitelistEntity> = allowedIps.filter { it.deletedAt == null }.sortedBy { it.createdAt }
 
-    override fun removeSession(sessionId: String) {
+    override fun markSessionAsDeleted(sessionId: String) {
         allowedIps.replaceAll {
             if (it.sessionId == sessionId && it.deletedAt == null) {
                 it.deletedAt = clock.instant()
@@ -38,7 +39,7 @@ class InMemoryFirewallWhitelistRepository(
         }
     }
 
-    override fun removeSessionUser(sessionId: String, userId: Long) {
+    override fun markSessionUserAsDeleted(sessionId: String, userId: Long) {
         allowedIps.replaceAll {
             if (it.sessionId == sessionId && it.userId == userId && it.deletedAt == null) {
                 it.deletedAt = clock.instant()
@@ -47,10 +48,13 @@ class InMemoryFirewallWhitelistRepository(
         }
     }
 
-    override fun removeAll() {
+    override fun deleteAll(): Long {
+        val count = allowedIps.count()
         allowedIps.replaceAll {
             it.deletedAt = clock.instant()
             it
         }
+
+        return count.toLong()
     }
 }
