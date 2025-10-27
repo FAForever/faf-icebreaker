@@ -18,7 +18,17 @@ class CurrentUserService(
         return principal?.subject?.toLongOrNull()
     }
 
-    fun getCurrentUserIp(): String =
-        httpRequest.getHeader(fafProperties.realIpHeader())
-            ?: httpRequest.remoteAddress().host()
+    /**
+     * Best-effort client IP. If the configured header contains a comma-separated list (e.g. X-Forwarded-For),
+     * take the first non-blank entry; otherwise fall back to the remote address.
+     */
+    fun getCurrentUserIp(): String {
+        val raw = httpRequest.getHeader(fafProperties.realIpHeader())
+        val forwarded = raw
+            ?.split(',')
+            ?.firstOrNull()
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+        return forwarded ?: httpRequest.remoteAddress().host()
+    }
 }
