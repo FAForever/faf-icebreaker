@@ -51,7 +51,7 @@ class HetznerFirewallServiceTest {
     @BeforeEach
     fun setup() {
         hetznerApi.resetCallCount()
-        firewallWhitelistRepository.removeAll()
+        firewallWhitelistRepository.deleteAll()
     }
 
     @Test

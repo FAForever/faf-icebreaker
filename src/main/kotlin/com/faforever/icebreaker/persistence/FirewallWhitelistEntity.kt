@@ -29,12 +29,12 @@ data class FirewallWhitelistEntity(
 ) : PanacheEntityBase
 
 interface FirewallWhitelistRepository {
-    fun insert(sessionId: String, userId: Long, allowedIp: String)
+    fun persist(entity: FirewallWhitelistEntity)
     fun getForSessionId(sessionId: String): List<FirewallWhitelistEntity>
     fun getAllActive(): List<FirewallWhitelistEntity>
-    fun removeSession(sessionId: String)
-    fun removeSessionUser(sessionId: String, userId: Long)
-    fun removeAll()
+    fun markSessionAsDeleted(sessionId: String)
+    fun markSessionUserAsDeleted(sessionId: String, userId: Long)
+    fun deleteAll(): Long
 }
 
 @Singleton
@@ -44,38 +44,22 @@ class FirewallWhitelistPanacheRepository(
 ) : PanacheRepository<FirewallWhitelistEntity>,
     FirewallWhitelistRepository {
 
-    override fun insert(sessionId: String, userId: Long, allowedIp: String) {
-        persist(
-            FirewallWhitelistEntity(
-                userId = userId,
-                sessionId = sessionId,
-                allowedIp = allowedIp,
-                createdAt = clock.instant(),
-                deletedAt = null,
-            ),
-        )
-    }
-
     override fun getForSessionId(sessionId: String): List<FirewallWhitelistEntity> =
         find("sessionId = ?1 and deletedAt is null", sessionId).list()
 
     override fun getAllActive(): List<FirewallWhitelistEntity> =
         find("deletedAt is null order by createdAt").list()
 
-    override fun removeSession(sessionId: String) {
+    override fun markSessionAsDeleted(sessionId: String) {
         update("deletedAt = ?1 where sessionId = ?2 and deletedAt is null", clock.instant(), sessionId)
     }
 
-    override fun removeSessionUser(sessionId: String, userId: Long) {
+    override fun markSessionUserAsDeleted(sessionId: String, userId: Long) {
         update(
             "deletedAt = ?1 where sessionId = ?2 and userId = ?3 and deletedAt is null",
             clock.instant(),
             sessionId,
             userId,
         )
-    }
-
-    override fun removeAll() {
-        update("deletedAt = ?1 where deletedAt is null", clock.instant())
     }
 }
