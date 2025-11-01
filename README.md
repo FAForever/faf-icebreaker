@@ -78,3 +78,11 @@ If you want to build an _über-jar_, execute the following command:
 ```
 
 The application, packaged as an _über-jar_, is now runnable using `java -jar build/*-runner.jar`.
+
+## Formatting your code
+
+You can format the codebase with
+
+```shell script
+./gradlew spotlessApply
+```
