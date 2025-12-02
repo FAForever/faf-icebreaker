@@ -9,6 +9,7 @@ import com.faforever.icebreaker.service.Session
 import com.faforever.icebreaker.service.SessionHandler
 import com.faforever.icebreaker.service.hetzner.HetznerFirewallService
 import io.quarkus.security.identity.SecurityIdentity
+import io.smallrye.mutiny.Uni
 import jakarta.annotation.PostConstruct
 import jakarta.enterprise.context.ApplicationScoped
 import org.slf4j.Logger
@@ -34,17 +35,11 @@ class CoturnSessionHandler(
         LOG.info("CoturnSessionHandler active: $active")
     }
 
-    override fun createSession(id: String, userId: Long, clientIp: String) {
-        hetznerFirewallService.whitelistIpForSession(id, userId, clientIp)
-    }
+    override fun createSession(id: String, userId: Long, clientIp: String): Uni<Unit> = hetznerFirewallService.whitelistIpForSession(id, userId, clientIp)
 
-    override fun deleteSession(id: String) {
-        hetznerFirewallService.removeWhitelistsForSession(id)
-    }
+    override fun deleteSession(id: String): Uni<Unit> = hetznerFirewallService.removeWhitelistsForSession(id)
 
-    override fun deletePeerSession(id: String, userId: Long) {
-        hetznerFirewallService.removeWhitelistForSessionUser(sessionId = id, userId = userId)
-    }
+    override fun deletePeerSession(id: String, userId: Long): Uni<Unit> = hetznerFirewallService.removeWhitelistForSessionUser(sessionId = id, userId = userId)
 
     override fun getIceServers() = coturnServerRepository.findActive().map { Server(id = it.host, region = it.region) }
 

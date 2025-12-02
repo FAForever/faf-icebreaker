@@ -4,6 +4,7 @@ import com.faforever.icebreaker.config.FafProperties
 import com.faforever.icebreaker.service.Server
 import com.faforever.icebreaker.service.Session
 import com.faforever.icebreaker.service.SessionHandler
+import io.smallrye.mutiny.Uni
 import jakarta.annotation.PostConstruct
 import jakarta.enterprise.context.ApplicationScoped
 import org.slf4j.Logger
@@ -29,18 +30,21 @@ class XirsysSessionHandler(
         LOG.info("XirsysSessionHandler active: $active, turnEnabled: $turnEnabled")
     }
 
-    override fun createSession(id: String, userId: Long, clientIp: String) {
+    override fun createSession(id: String, userId: Long, clientIp: String): Uni<Unit> {
         LOG.debug("Creating session id $id")
         xirsysApiAdapter.createChannel(id)
+        return Uni.createFrom().nullItem()
     }
 
-    override fun deleteSession(id: String) {
+    override fun deleteSession(id: String): Uni<Unit> {
         xirsysApiAdapter.deleteChannel(channelName = id)
+        return Uni.createFrom().nullItem()
     }
 
-    override fun deletePeerSession(id: String, userId: Long) {
+    override fun deletePeerSession(id: String, userId: Long): Uni<Unit> {
         // Xirsys only cares about the entire session being deleted, there's no
         // per-peer state.
+        return Uni.createFrom().nullItem()
     }
 
     override fun getIceServers() = listOf(Server(id = SERVER_NAME, region = "Global"))
