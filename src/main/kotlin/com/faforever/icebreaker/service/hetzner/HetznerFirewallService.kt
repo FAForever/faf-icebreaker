@@ -7,7 +7,12 @@ import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.Firewall
 import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.FirewallRule.Protocol
 import io.quarkus.scheduler.Scheduled
 import io.smallrye.mutiny.Uni
+import io.vertx.core.json.JsonObject
+import jakarta.enterprise.context.ApplicationScoped
 import jakarta.inject.Singleton
+import org.eclipse.microprofile.reactive.messaging.Channel
+import org.eclipse.microprofile.reactive.messaging.Emitter
+import org.eclipse.microprofile.reactive.messaging.Incoming
 import org.eclipse.microprofile.rest.client.inject.RestClient
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -16,8 +21,12 @@ import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.InetAddress
 import java.time.Clock
+import java.time.Duration
 import java.util.Queue
+import java.util.UUID
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CompletionStage
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.jvm.optionals.getOrNull
 
@@ -43,25 +52,32 @@ private fun String.toCidr(): String? = try {
     null
 }
 
+/** Requests a sync or confirms that the requested sync has been successfully completed. */
+data class SyncMessage(
+    /** A unique identifier for this request/response pair. Used to pair requests and responses. */
+    val id: String,
+)
+
 /**
  * Processes requests to the Hetzner API in batches.
  *
- * In the future, we might run more than one instance of the icebreaker server.
- * If so, we would need to split this class into two: one that writes each request
- * to the DB (containing the methods apart from [syncFirewallWithHetzner]) and
- * one that does the batch update to Hetzner. Between them, we would use RabbitMQ
- * in "single active consumer" mode to ensure than only one of the server's replicas
- * is sending queries to Hetzner.
+ * This class sends messages via RabbitMQ to [HetznerFirewallUpdater], which
+ * implements the actual batching and rate-limiting logic. Splitting the logic
+ * in this way allows us to use RabbitMQ's "single active consumer" feature
+ * to ensure that only one instance of the icebreaker server sends updates to
+ * Hetzner.
  */
 @Singleton
 class HetznerFirewallService(
-    private val hetznerProperties: HetznerProperties,
     private val repository: FirewallWhitelistRepository,
-    @RestClient private val client: HetznerApiClient,
     private val clock: Clock,
+    @param:Channel("hetzner-request-out") private val requestEmitter: Emitter<SyncMessage>,
 ) {
-    // Requests waiting to be resolved the next time [syncFirewallWithHetzner] runs.
-    private val requestQueue = ConcurrentLinkedQueue<CompletableFuture<Unit>>()
+    /**
+     * Maps from the ID of a SyncMessage to a future that will be completed when a
+     * [SyncMessage] acknowledgement with that ID is received.
+     */
+    private val awaitedMessagesById = ConcurrentHashMap<String, CompletableFuture<Unit>>()
 
     /** Whitelists [ipAddress] for session [sessionId]. */
     fun whitelistIpForSession(sessionId: String, userId: Long, ipAddress: String): Uni<Unit> {
@@ -75,30 +91,71 @@ class HetznerFirewallService(
                 deletedAt = null,
             ),
         )
-        val future = CompletableFuture<Unit>()
-        requestQueue.add(future)
-        return Uni.createFrom().completionStage(future)
+        return syncFirewall()
     }
 
     /** Removes all whitelists for session [sessionId]. */
     fun removeWhitelistsForSession(sessionId: String): Uni<Unit> {
         LOG.debug("Removing whitelist for session {}", sessionId)
         repository.markSessionAsDeleted(sessionId)
-        val future = CompletableFuture<Unit>()
-        requestQueue.add(future)
-        return Uni.createFrom().completionStage(future)
+        return syncFirewall()
     }
 
     /** Removes only the whitelist for user [userId] in session [sessionId]. */
     fun removeWhitelistForSessionUser(userId: Long, sessionId: String): Uni<Unit> {
         LOG.debug("Removing user {}'s whitelist for session {}", userId, sessionId)
         repository.markSessionUserAsDeleted(sessionId, userId)
-        val future = CompletableFuture<Unit>()
-        requestQueue.add(future)
-        return Uni.createFrom().completionStage(future)
+        return syncFirewall()
     }
 
-    @Scheduled(every = "1s", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
+    /**
+     * Asks [HetznerFirewallUpdater] via RabbitMQ to sync rules with Hetzner's API.
+     *
+     * The returned Uni is completed by [handle] when it receives a message indicating
+     * that the requested sync has been successfully completed.
+     */
+    private fun syncFirewall(): Uni<Unit> {
+        val requestId = UUID.randomUUID().toString()
+        val future = CompletableFuture<Unit>()
+        awaitedMessagesById.set(requestId, future)
+        requestEmitter.send(SyncMessage(requestId))
+        return Uni.createFrom().completionStage(future).ifNoItem().after(Duration.ofSeconds(10)).fail()
+    }
+
+    @Incoming("hetzner-response-in")
+    fun handle(json: JsonObject) {
+        val response = json.mapTo(SyncMessage::class.java)
+        // The message is a response to a previous request; we
+        // complete the future that that request is waiting for.
+        awaitedMessagesById.remove(response.id)?.complete(Unit)
+        // The response is acked when this function returns
+    }
+}
+
+@ApplicationScoped
+private class HetznerFirewallUpdater(
+    private val hetznerProperties: HetznerProperties,
+    private val repository: FirewallWhitelistRepository,
+    @param:RestClient private val hetznerClient: HetznerApiClient,
+    @param:Channel("hetzner-response-out") private val responseEmitter: Emitter<SyncMessage>,
+) {
+    private data class BufferedMessage(val payload: SyncMessage, val ack: CompletableFuture<Unit>)
+
+    // Requests waiting to be resolved the next time [syncFirewallWithHetzner] runs.
+    private val requestQueue = ConcurrentLinkedQueue<BufferedMessage>()
+
+    @Incoming("hetzner-request-in")
+    fun handle(json: JsonObject): CompletionStage<Unit> {
+        val request = json.mapTo(SyncMessage::class.java)
+        val ack = CompletableFuture<Unit>()
+        requestQueue.add(BufferedMessage(request, ack))
+        // The message is acked when `ack` is marked as completed.
+        return ack
+    }
+
+    // We delay by 3s to make it more likely that RabbitMQ is running by the time this method
+    // runs during integration tests. Otherwise, we get spurious errors logged.
+    @Scheduled(every = "1s", delayed = "3s", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     fun syncFirewallWithHetzner() {
         val firewall = hetznerProperties.firewallId().getOrNull() ?: return
 
@@ -111,7 +168,7 @@ class HetznerFirewallService(
         try {
             val request = buildSetFirewallRequest()
             LOG.info("Syncing {} rules with Hetzner firewall {}", request.rules.size, firewall)
-            val response = client.setFirewallRules(firewall, request)
+            val response = hetznerClient.setFirewallRules(firewall, request)
             // It is important that "no actions" is a success: it
             // could happen that a request thread updates the DB, then
             // syncFirewallWithHetzner runs, then the request thread
@@ -126,14 +183,17 @@ class HetznerFirewallService(
             val success = response.actions.all { it.error == null }
             if (success) {
                 LOG.info("Successfully updated Hetzner firewall rules")
-                batch.forEach { it.complete(Unit) }
+                batch.forEach {
+                    responseEmitter.send(it.payload)
+                    it.ack.complete(Unit)
+                }
             } else {
                 LOG.error("Failed to update Hetzner firewall rules: API request failed")
-                batch.forEach { it.completeExceptionally(IOException("Hetzner API request failed")) }
+                batch.forEach { it.ack.completeExceptionally(IOException("Hetzner API request failed")) }
             }
         } catch (e: Exception) {
             LOG.error("Failed to update Hetzner firewall rules", e)
-            batch.forEach { it.completeExceptionally(e) }
+            batch.forEach { it.ack.completeExceptionally(e) }
         }
     }
 

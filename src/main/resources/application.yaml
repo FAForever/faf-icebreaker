@@ -94,12 +94,36 @@ mp:
           exclusive: true
         exchange:
           name: ice
+      hetzner-request-in:
+        connector: smallrye-rabbitmq
+        virtual-host: ${RABBITMQ_VHOST:/faf-core}
+        queue:
+          name: hetzner-request-queue
+          single-active-consumer: true
+        exchange:
+          name: hetzner-request-exchange
+      hetzner-response-in:
+        connector: smallrye-rabbitmq
+        virtual-host: ${RABBITMQ_VHOST:/faf-core}
+        queue: hetzner-response-queue
+        exchange:
+          name: hetzner-response-exchange
     outgoing:
       events-out:
         connector: smallrye-rabbitmq
         virtual-host: ${RABBITMQ_VHOST:/faf-core}
         exchange:
           name: ice
+      hetzner-request-out:
+        connector: smallrye-rabbitmq
+        virtual-host: ${RABBITMQ_VHOST:/faf-core}
+        exchange:
+          name: hetzner-request-exchange
+      hetzner-response-out:
+        connector: smallrye-rabbitmq
+        virtual-host: ${RABBITMQ_VHOST:/faf-core}
+        exchange:
+          name: hetzner-response-exchange
 
 rabbitmq-host: ${RABBITMQ_HOST:localhost}
 rabbitmq-port: ${RABBITMQ_PORT:5672}
