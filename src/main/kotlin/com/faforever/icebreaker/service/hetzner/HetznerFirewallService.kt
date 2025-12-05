@@ -103,7 +103,10 @@ class HetznerFirewallService(
         val firewall = hetznerProperties.firewallId().getOrNull() ?: return
 
         val batch = takeAll(requestQueue)
-        if (batch.isEmpty()) return
+        if (batch.isEmpty()) {
+            LOG.trace("No changes to apply for firewall ID {}", firewall)
+            return
+        }
 
         try {
             val request = buildSetFirewallRequest()
@@ -163,7 +166,7 @@ class HetznerFirewallService(
 }
 
 private fun <T> takeAll(queue: Queue<T>): List<T> {
-    var result = mutableListOf<T>()
+    val result = mutableListOf<T>()
     while (true) {
         val x = queue.poll() ?: break
         result.add(x)
