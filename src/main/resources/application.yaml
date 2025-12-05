@@ -113,7 +113,7 @@ rabbitmq-password: ${RABBITMQ_PASSWORD:banana}
     enabled: ${CLOUDFLARE_ENABLED:false}
   hetzner:
     max-ips-per-rule: 100
-    api-key: "fake"
+    api-key: ${HETZNER_API_KEY:"fake"}
   smallrye:
     jwt:
       sign:
@@ -155,7 +155,7 @@ rabbitmq-password: ${RABBITMQ_PASSWORD:banana}
         - StubHetznerApiClient
     rest-client:
       hetzner:
-        url: ${HETZNER_BASE_URL}
+        url: https://api.hetzner.cloud/v1
     oidc:
      self-tenant:
        public-key: |-
