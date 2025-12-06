@@ -1,14 +1,13 @@
 package com.faforever.icebreaker.service.xirsys
 
 import com.faforever.icebreaker.config.FafProperties
+import com.faforever.icebreaker.security.CurrentUserService
 import com.faforever.icebreaker.service.xirsys.geolocation.RegionSelectorService
 import com.faforever.icebreaker.service.xirsys.geolocation.XirsysRegion
 import com.faforever.icebreaker.util.ErrorLoggingFilter
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
-import io.vertx.core.http.HttpServerRequest
 import jakarta.inject.Singleton
-import jakarta.ws.rs.core.Context
 import org.eclipse.microprofile.faulttolerance.Retry
 import org.eclipse.microprofile.rest.client.RestClientBuilder
 import org.slf4j.Logger
@@ -26,9 +25,9 @@ private val LOG: Logger = LoggerFactory.getLogger(XirsysApiAdapter::class.java)
 class XirsysApiAdapter(
     private val fafProperties: FafProperties,
     private val xirsysProperties: XirsysProperties,
+    private val currentUserService: CurrentUserService,
     private val regionSelectorService: RegionSelectorService,
     private val objectMapper: ObjectMapper,
-    @Context private val httpRequest: HttpServerRequest,
 ) {
     private val globalXirsysApiClient: XirsysApiClient = buildXirsysApiClient(xirsysProperties.baseUrl())
 
@@ -96,7 +95,8 @@ class XirsysApiAdapter(
         turnRequest: TurnRequest = TurnRequest(),
     ): TurnResponse = runCatching {
         parseAndUnwrap<TurnResponse> {
-            val region = regionSelectorService.getClosestRegion(httpRequest.getIp())
+            val ip = InetAddress.getByName(currentUserService.getCurrentUserIp())
+            val region = regionSelectorService.getClosestRegion(ip)
             getApiClientForRegion(region)
                 .requestIceServers(
                     namespace = xirsysProperties.channelNamespace(),
@@ -127,7 +127,4 @@ class XirsysApiAdapter(
             throw XirsysUnspecifiedApiException(errorResponse = response, cause = e)
         }
     }
-
-    private fun HttpServerRequest.getIp() =
-        InetAddress.getByName(getHeader(fafProperties.realIpHeader()) ?: remoteAddress().host())
 }
