@@ -10,6 +10,7 @@ import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import jakarta.transaction.Transactional
+import org.hibernate.exception.ConstraintViolationException
 import java.time.Clock
 import java.time.Instant
 
@@ -29,7 +30,8 @@ data class FirewallWhitelistEntity(
 ) : PanacheEntityBase
 
 interface FirewallWhitelistRepository {
-    fun persist(entity: FirewallWhitelistEntity)
+    // Inserts `entity` if no whitelist already exists for this (session, user); otherwise returns the existing entity.
+    fun persistOrGet(entity: FirewallWhitelistEntity): FirewallWhitelistEntity
     fun getForSessionId(sessionId: String): List<FirewallWhitelistEntity>
     fun getAllActive(): List<FirewallWhitelistEntity>
     fun markSessionAsDeleted(sessionId: String)
@@ -43,6 +45,26 @@ class FirewallWhitelistPanacheRepository(
     private val clock: Clock,
 ) : PanacheRepository<FirewallWhitelistEntity>,
     FirewallWhitelistRepository {
+
+    override fun persistOrGet(entity: FirewallWhitelistEntity): FirewallWhitelistEntity {
+        try {
+            // Try to persist, letting the table's uniqueness constraint
+            // detect existing entries.
+            persist(entity)
+            return entity
+        } catch (e: ConstraintViolationException) {
+            // We need to reset the Hibernate session state, otherwise it will try to
+            // flush `entity` and raise an exception when it sees that `entity` was not
+            // persisted.
+            getEntityManager().clear()
+            val existing = find(
+                "sessionId = ?1 and userId = ?2 and deletedAt is null",
+                entity.sessionId,
+                entity.userId,
+            ).firstResult()
+            return existing ?: throw e
+        }
+    }
 
     override fun getForSessionId(sessionId: String): List<FirewallWhitelistEntity> =
         find("sessionId = ?1 and deletedAt is null", sessionId).list()

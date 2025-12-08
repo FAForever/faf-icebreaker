@@ -82,7 +82,7 @@ class HetznerFirewallService(
     /** Whitelists [ipAddress] for session [sessionId]. */
     fun whitelistIpForSession(sessionId: String, userId: Long, ipAddress: String): Uni<Unit> {
         LOG.debug("Whitelisting IP {} for session {} in Hetzner cloud firewall", ipAddress, sessionId)
-        repository.persist(
+        repository.persistOrGet(
             FirewallWhitelistEntity(
                 userId = userId,
                 sessionId = sessionId,
