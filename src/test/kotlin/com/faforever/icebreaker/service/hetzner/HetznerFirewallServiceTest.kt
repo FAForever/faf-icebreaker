@@ -64,13 +64,22 @@ class HetznerFirewallServiceTest {
     }
 
     @Test
-    fun `Add whitelist de-duplicates`() {
+    fun `Add whitelist de-duplicates IPs sent to Hetzner`() {
         service.whitelistIpForSession("game/200", userId = 123, ipAddress = "1.2.3.4")
         service.whitelistIpForSession("game/201", userId = 123, ipAddress = "1.2.3.4")
         runBlocking { waitUntil { hetznerApi.getCallCount() == 1 } }
 
         val allowedIps = hetznerApi.getRulesByFirewallId("fwid")!!.allSourceIps()
         assertThat(allowedIps).isEqualTo(setOf("1.2.3.4/32"))
+    }
+
+    @Test
+    fun `Add whitelist re-uses existing active session`() {
+        service.whitelistIpForSession("game/200", userId = 123, ipAddress = "1.2.3.4")
+        service.whitelistIpForSession("game/200", userId = 123, ipAddress = "1.2.3.4")
+        runBlocking { waitUntil { hetznerApi.getCallCount() == 1 } }
+
+        assertThat(firewallWhitelistRepository.getAllActive()).hasSize(1)
     }
 
     @Test
