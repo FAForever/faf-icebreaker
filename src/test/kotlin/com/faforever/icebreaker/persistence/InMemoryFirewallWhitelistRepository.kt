@@ -12,18 +12,29 @@ class InMemoryFirewallWhitelistRepository(
 ) : FirewallWhitelistRepository {
     private val allowedIps: MutableList<FirewallWhitelistEntity> = CopyOnWriteArrayList()
 
-    override fun persist(entity: FirewallWhitelistEntity) {
+    fun persist(entity: FirewallWhitelistEntity): FirewallWhitelistEntity {
         val lastId = allowedIps.maxOfOrNull { it.id } ?: 0
-        allowedIps.add(
-            FirewallWhitelistEntity(
-                id = lastId + 1,
-                userId = entity.userId,
-                sessionId = entity.sessionId,
-                allowedIp = entity.allowedIp,
-                createdAt = clock.instant(),
-                deletedAt = null,
-            ),
+        val newEntity = FirewallWhitelistEntity(
+            id = lastId + 1,
+            userId = entity.userId,
+            sessionId = entity.sessionId,
+            allowedIp = entity.allowedIp,
+            createdAt = clock.instant(),
+            deletedAt = null,
         )
+        allowedIps.add(newEntity)
+        return newEntity
+    }
+
+    @Synchronized
+    override fun persistOrGet(entity: FirewallWhitelistEntity): FirewallWhitelistEntity {
+        val existing = allowedIps.find {
+            it.sessionId == entity.sessionId && it.userId == entity.userId && it.deletedAt == null
+        }
+        if (existing != null) {
+            return existing
+        }
+        return persist(entity)
     }
 
     override fun getForSessionId(sessionId: String): List<FirewallWhitelistEntity> = getAllActive().filter { it.sessionId == sessionId }
