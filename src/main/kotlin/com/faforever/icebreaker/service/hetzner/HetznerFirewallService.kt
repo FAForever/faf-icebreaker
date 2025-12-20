@@ -119,7 +119,12 @@ class HetznerFirewallService(
         val future = CompletableFuture<Unit>()
         awaitedMessagesById[requestId] = future
         requestEmitter.send(SyncMessage(requestId))
-        return Uni.createFrom().completionStage(future).ifNoItem().after(Duration.ofSeconds(10)).fail()
+        return Uni.createFrom().completionStage(future)
+            .ifNoItem().after(Duration.ofSeconds(10)).fail()
+            .onFailure().invoke { e ->
+                LOG.error("Failed to sync firewall rule for request id {}", requestId, e)
+                awaitedMessagesById.remove(requestId)
+            }
     }
 
     @Incoming("hetzner-response-in")
