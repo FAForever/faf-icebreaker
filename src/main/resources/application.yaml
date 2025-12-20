@@ -45,7 +45,7 @@ quarkus:
     loki:
       url: ${LOKI_BASE_URL:http://localhost:3100}
     hetzner:
-      url: ${HETZNER_BASE_URL}
+      url: ${HETZNER_BASE_URL:https://api.hetzner.cloud/v1}
   swagger-ui:
     always-include: true
     path: "/q/swagger-ui"
@@ -177,9 +177,6 @@ rabbitmq-password: ${RABBITMQ_PASSWORD:banana}
         # Comment out to enable calling the Hetzner API in dev.
         # You will need to set the HETZNER_BASE_URL environment variable.
         - StubHetznerApiClient
-    rest-client:
-      hetzner:
-        url: https://api.hetzner.cloud/v1
     oidc:
      self-tenant:
        public-key: |-
