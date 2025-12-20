@@ -117,7 +117,7 @@ class HetznerFirewallService(
     private fun syncFirewall(): Uni<Unit> {
         val requestId = UUID.randomUUID().toString()
         val future = CompletableFuture<Unit>()
-        awaitedMessagesById.set(requestId, future)
+        awaitedMessagesById[requestId] = future
         requestEmitter.send(SyncMessage(requestId))
         return Uni.createFrom().completionStage(future).ifNoItem().after(Duration.ofSeconds(10)).fail()
     }
