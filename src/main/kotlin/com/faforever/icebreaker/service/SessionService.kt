@@ -29,6 +29,7 @@ import org.eclipse.microprofile.reactive.messaging.Incoming
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.time.Clock
+import java.time.Duration
 import java.time.temporal.ChronoUnit
 
 private val LOG: Logger = LoggerFactory.getLogger(SessionService::class.java)
@@ -91,7 +92,7 @@ class SessionService(
         val currentUserIp = currentUserService.getCurrentUserIp()
         val servers =
             activeSessionHandlers.flatMap {
-                it.createSession(sessionId, currentUserId, currentUserIp)
+                it.createSession(sessionId, currentUserId, currentUserIp).await().atMost(Duration.ofSeconds(10))
                 it.getIceServersSession(sessionId)
             }
 
@@ -139,7 +140,7 @@ class SessionService(
                 instant = cleanupTime,
             ).forEach { iceSession ->
                 LOG.debug("Cleaning up session id ${iceSession.id}")
-                activeSessionHandlers.forEach { it.deleteSession(iceSession.id) }
+                activeSessionHandlers.forEach { it.deleteSession(iceSession.id).await().atMost(Duration.ofSeconds(10)) }
 
                 gameUserStatsRepository.deleteByGameId(iceSession.gameId)
                 iceSessionRepository.delete(iceSession)
@@ -201,7 +202,7 @@ class SessionService(
 
         val sessionId = buildSessionId(gameId)
         if (eventMessage is PeerClosingMessage) {
-            activeSessionHandlers.forEach { it.deletePeerSession(sessionId, currentUserId) }
+            activeSessionHandlers.forEach { it.deletePeerSession(sessionId, currentUserId).await().atMost(Duration.ofSeconds(10)) }
         }
 
         rabbitmqEventEmitter.send(eventMessage)
