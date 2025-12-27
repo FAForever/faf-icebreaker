@@ -28,7 +28,8 @@ import org.eclipse.microprofile.reactive.messaging.Emitter
 import org.eclipse.microprofile.reactive.messaging.Incoming
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import java.time.Instant
+import java.time.Clock
+import java.time.Duration
 import java.time.temporal.ChronoUnit
 
 private val LOG: Logger = LoggerFactory.getLogger(SessionService::class.java)
@@ -45,6 +46,7 @@ class SessionService(
     @Channel("events-out")
     private val rabbitmqEventEmitter: Emitter<EventMessage>,
     private val lokiService: LokiService,
+    private val clock: Clock,
 ) {
     private val activeSessionHandlers = sessionHandlers.filter { it.active }
     private val localEventEmitter = MultiEmitterProcessor.create<EventMessage>()
@@ -64,7 +66,7 @@ class SessionService(
             ).claim("scp", listOf("lobby"))
             .issuer(fafProperties.selfUrl())
             .audience(fafProperties.selfUrl())
-            .expiresAt(Instant.now().plus(fafProperties.maxSessionLifeTimeHours(), ChronoUnit.HOURS))
+            .expiresAt(clock.instant().plus(fafProperties.maxSessionLifeTimeHours(), ChronoUnit.HOURS))
             .sign()
     }
 
@@ -74,6 +76,9 @@ class SessionService(
     )
     fun getServers(): List<Server> = activeSessionHandlers.flatMap { it.getIceServers() }
 
+    /**
+     * Creates a new session for [gameId]
+     */
     fun getSession(gameId: Long): Session {
         // For compatibility reasons right now we only check on mismatch because general FAF JWT are still allowed
         // but have no implicit gameId attached
@@ -81,11 +86,13 @@ class SessionService(
             throw ForbiddenException("Not authorized to join game $gameId")
         }
 
-        val sessionId = "game/$gameId"
+        val sessionId = buildSessionId(gameId)
 
+        val currentUserId = currentUserService.requireCurrentUserId()
+        val currentUserIp = currentUserService.getCurrentUserIp()
         val servers =
             activeSessionHandlers.flatMap {
-                it.createSession(sessionId)
+                it.createSession(sessionId, currentUserId, currentUserIp).await().atMost(Duration.ofSeconds(10))
                 it.getIceServersSession(sessionId)
             }
 
@@ -112,7 +119,7 @@ class SessionService(
                     IceSessionEntity(
                         id = sessionId,
                         gameId = gameId,
-                        createdAt = Instant.now(),
+                        createdAt = clock.instant(),
                     ),
                 )
             } catch (e: Exception) {
@@ -126,13 +133,14 @@ class SessionService(
     // causing error messages when running the tests.
     @Scheduled(delayed = "10s", every = "10m")
     fun cleanUpSessions() {
-        LOG.info("Cleaning up outdated sessions")
+        val cleanupTime = clock.instant().minus(fafProperties.maxSessionLifeTimeHours(), ChronoUnit.HOURS)
+        LOG.info("Cleaning up sessions older than $cleanupTime")
         iceSessionRepository
             .findByCreatedAtLesserThan(
-                instant = Instant.now().minus(fafProperties.maxSessionLifeTimeHours(), ChronoUnit.HOURS),
+                instant = cleanupTime,
             ).forEach { iceSession ->
                 LOG.debug("Cleaning up session id ${iceSession.id}")
-                activeSessionHandlers.forEach { it.deleteSession(iceSession.id) }
+                activeSessionHandlers.forEach { it.deleteSession(iceSession.id).await().atMost(Duration.ofSeconds(10)) }
 
                 gameUserStatsRepository.deleteByGameId(iceSession.gameId)
                 iceSessionRepository.delete(iceSession)
@@ -140,7 +148,7 @@ class SessionService(
     }
 
     fun listenForEventMessages(gameId: Long): Multi<EventMessage> {
-        val userId = currentUserService.getCurrentUserId()!!
+        val userId = currentUserService.requireCurrentUserId()
 
         // Use Uni to wrap the blocking repository calls
         val userStatsUni = Uni.createFrom().item {
@@ -167,7 +175,8 @@ class SessionService(
             }
         }.flatMap {
             // Send message after processing stats persistence or increment
-            Uni.createFrom().completionStage(rabbitmqEventEmitter.send(ConnectedMessage(gameId = gameId, senderId = userId)))
+            Uni.createFrom()
+                .completionStage(rabbitmqEventEmitter.send(ConnectedMessage(gameId = gameId, senderId = userId)))
         }.onItem().transformToMulti {
             LOG.debug("Subscription to gameId $gameId events established")
 
@@ -186,9 +195,14 @@ class SessionService(
             "gameId $gameId from endpoint does not match gameId ${eventMessage.gameId} in candidateMessage"
         }
 
-        val currentUserId = currentUserService.getCurrentUserId()
-        check(eventMessage.senderId == currentUserService.getCurrentUserId()) {
-            "current user id $currentUserId from endpoint does not match sourceId ${eventMessage.senderId} in candidateMessage"
+        val currentUserId = currentUserService.requireCurrentUserId()
+        if (eventMessage.senderId != currentUserId) {
+            throw ForbiddenException("Current user id $currentUserId from endpoint does not match sourceId ${eventMessage.senderId} in candidateMessage")
+        }
+
+        val sessionId = buildSessionId(gameId)
+        if (eventMessage is PeerClosingMessage) {
+            activeSessionHandlers.forEach { it.deletePeerSession(sessionId, currentUserId).await().atMost(Duration.ofSeconds(10)) }
         }
 
         rabbitmqEventEmitter.send(eventMessage)
@@ -202,7 +216,7 @@ class SessionService(
     }
 
     fun onLogsPushed(gameId: Long, logs: List<LogMessage>) {
-        val currentUserId = currentUserService.getCurrentUserId()!!
+        val currentUserId = currentUserService.requireCurrentUserId()
 
         LOG.debug("Received logs for gameId {} from userId {}", gameId, currentUserId)
 
@@ -216,4 +230,6 @@ class SessionService(
 
         lokiService.forwardLogs(gameId = gameId, userId = currentUserId, logs = logs)
     }
+
+    private fun buildSessionId(gameId: Long) = "game/$gameId"
 }
