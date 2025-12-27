@@ -178,8 +178,6 @@ private class HetznerFirewallUpdater(
             return
         }
 
-
-
         try {
             val request = buildSetFirewallRequest()
             LOG.info("Syncing {} rules with Hetzner firewall {}", request.rules.size, firewall)
