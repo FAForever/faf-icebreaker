@@ -162,13 +162,23 @@ private class HetznerFirewallUpdater(
     // runs during integration tests. Otherwise, we get spurious errors logged.
     @Scheduled(every = "1s", delayed = "3s", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     fun syncFirewallWithHetzner() {
-        val firewall = hetznerProperties.firewallId().getOrNull() ?: return
-
+        val firewall = hetznerProperties.firewallId().getOrNull()
         val batch = takeAll(requestQueue)
+
+        if (firewall == null) {
+            batch.forEach {
+                responseEmitter.send(it.payload)
+                it.ack.complete(Unit)
+            }
+            return
+        }
+
         if (batch.isEmpty()) {
             LOG.trace("No changes to apply for firewall ID {}", firewall)
             return
         }
+
+
 
         try {
             val request = buildSetFirewallRequest()
