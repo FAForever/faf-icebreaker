@@ -1,7 +1,7 @@
 package com.faforever.icebreaker.web
 
-import com.faforever.icebreaker.persistence.CoturnServerEntity
-import com.faforever.icebreaker.persistence.CoturnServerRepository
+import com.faforever.icebreaker.persistence.TurnServerEntity
+import com.faforever.icebreaker.persistence.TurnServerRepository
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import jakarta.inject.Inject
@@ -19,18 +19,18 @@ import org.junit.jupiter.api.TestInstance
 class SessionControllerTest {
 
     @Inject
-    lateinit var coturnServerRepository: CoturnServerRepository
+    lateinit var turnServerRepository: TurnServerRepository
 
     val gameId = 100L
     val testJwt = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxIiwiZXh0Ijp7InJvbGVzIjpbIlVTRVIiXSwiZ2FtZUlkIjoxMDB9LCJzY3AiOlsibG9iYnkiXSwiaXNzIjoiaHR0cHM6Ly9pY2UuZmFmb3JldmVyLmNvbSIsImF1ZCI6Imh0dHBzOi8vaWNlLmZhZm9yZXZlci5jb20iLCJleHAiOjIwMDAwMDAwMDAsImlhdCI6MTc0MTAwMDAwMCwianRpIjoiMDE5YjBmMDYtOGJlYi00NzEyLWFiNWUtNGUyNmVjMTM0YjFlIn0.CHEtH0I-BacvjIc_a8ZSKcXMmRZqObGIqScs8BNbZrcje9GVvnTeJEkOxh3Lpo0C1Cm8_x_YQ-zilMTmVu87ZH31_FRYvJuaU9gjo3izmHcncWmSOpjg2n8BtkPXcnggdxM5DW7bPUytkgPGhvFUbeTNRw0Lv1Atb9L2NcW33jhQ-jz-3Ev0fVfgAzJMxrhDCpoCw4QMk6doEIbmJ0Egl1-9AHyr3jd1PXMQAI2K3dX2v0hUmOJ2MxClukUFXkXRp76ZJ9L594YU1gLlIprcuPtRQCIvgJ_gD2Cd6iPQHAUFFvNFmpyLVDU3fgrznWIRkcu2CWSlybhFHCvx5Eldhg"
 
-    /** Deletes existing coturn servers and inserts test server data. */
+    /** Deletes existing TURN servers and inserts test server data. */
     @BeforeAll
     @Transactional
     fun insertTestData() {
-        coturnServerRepository.deleteAll()
-        coturnServerRepository.persist(
-            CoturnServerEntity(
+        turnServerRepository.deleteAll()
+        turnServerRepository.persist(
+            TurnServerEntity(
                 id = 0L, // Will be auto-generated
                 region = "test-region",
                 host = "turn.test.example.com",
@@ -43,8 +43,8 @@ class SessionControllerTest {
                 active = true,
             ),
         )
-        coturnServerRepository.persist(
-            CoturnServerEntity(
+        turnServerRepository.persist(
+            TurnServerEntity(
                 id = 0L, // Will be auto-generated
                 region = "test-region-2",
                 host = "turn2.test.example.com",
@@ -57,8 +57,8 @@ class SessionControllerTest {
                 active = true,
             ),
         )
-        coturnServerRepository.persist(
-            CoturnServerEntity(
+        turnServerRepository.persist(
+            TurnServerEntity(
                 id = 0L, // Will be auto-generated
                 region = "disabled-region",
                 host = "turn.disabled.example.com",

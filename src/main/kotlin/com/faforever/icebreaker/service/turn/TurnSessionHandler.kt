@@ -1,8 +1,8 @@
-package com.faforever.icebreaker.service.coturn
+package com.faforever.icebreaker.service.turn
 
 import com.faforever.icebreaker.config.FafProperties
-import com.faforever.icebreaker.persistence.CoturnServerEntity
-import com.faforever.icebreaker.persistence.CoturnServerRepository
+import com.faforever.icebreaker.persistence.TurnServerEntity
+import com.faforever.icebreaker.persistence.TurnServerRepository
 import com.faforever.icebreaker.security.getUserId
 import com.faforever.icebreaker.service.Server
 import com.faforever.icebreaker.service.Session
@@ -16,12 +16,12 @@ import java.util.Base64
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
-private val LOG: Logger = LoggerFactory.getLogger(CoturnSessionHandler::class.java)
+private val LOG: Logger = LoggerFactory.getLogger(TurnSessionHandler::class.java)
 
 @ApplicationScoped
-class CoturnSessionHandler(
+class TurnSessionHandler(
     val fafProperties: FafProperties,
-    val coturnServerRepository: CoturnServerRepository,
+    val turnServerRepository: TurnServerRepository,
     val securityIdentity: SecurityIdentity,
 ) : SessionHandler {
     // if you don't want to use it, leave the SQL table empty
@@ -29,21 +29,21 @@ class CoturnSessionHandler(
 
     @PostConstruct
     fun init() {
-        LOG.info("CoturnSessionHandler active: $active")
+        LOG.info("TurnSessionHandler active: $active")
     }
 
     override fun createSession(id: String) {
-        // Coturn has no session handling, we use global access
+        // TURN has no session handling, we use global access
     }
 
     override fun deleteSession(id: String) {
-        // Coturn has no session handling, we use global access
+        // TURN has no session handling, we use global access
     }
 
-    override fun getIceServers() = coturnServerRepository.findActive().map { Server(id = it.host, region = it.region) }
+    override fun getIceServers() = turnServerRepository.findActive().map { Server(id = it.host, region = it.region) }
 
     override fun getIceServersSession(sessionId: String): List<Session.Server> =
-        coturnServerRepository
+        turnServerRepository
             .findActive()
             .map {
                 val (tokenName, tokenSecret) = buildHmac(sessionId, securityIdentity.getUserId(), it.presharedKey)
@@ -51,7 +51,7 @@ class CoturnSessionHandler(
                     id = it.host,
                     username = tokenName,
                     credential = tokenSecret,
-                    urls = buildUrls(coturnServer = it),
+                    urls = buildUrls(turnServer = it),
                 )
             }
 
@@ -76,24 +76,24 @@ class CoturnSessionHandler(
     }
 
     private fun buildUrls(
-        coturnServer: CoturnServerEntity,
+        turnServer: TurnServerEntity,
     ): List<String> {
         val result = mutableListOf<String>()
 
-        if (coturnServer.stunPort != null) {
-            result.add("stun://${coturnServer.host}:${coturnServer.stunPort}")
+        if (turnServer.stunPort != null) {
+            result.add("stun://${turnServer.host}:${turnServer.stunPort}")
         }
 
-        if (coturnServer.turnUdpPort != null) {
-            result.add("turn://${coturnServer.host}:${coturnServer.turnUdpPort}?transport=udp")
+        if (turnServer.turnUdpPort != null) {
+            result.add("turn://${turnServer.host}:${turnServer.turnUdpPort}?transport=udp")
         }
 
-        if (coturnServer.turnTcpPort != null) {
-            result.add("turn://${coturnServer.host}:${coturnServer.turnTcpPort}?transport=tcp")
+        if (turnServer.turnTcpPort != null) {
+            result.add("turn://${turnServer.host}:${turnServer.turnTcpPort}?transport=tcp")
         }
 
-        if (coturnServer.turnsTcpPort != null) {
-            result.add("turns://${coturnServer.host}:${coturnServer.turnsTcpPort}?transport=tcp")
+        if (turnServer.turnsTcpPort != null) {
+            result.add("turns://${turnServer.host}:${turnServer.turnsTcpPort}?transport=tcp")
         }
 
         return result
