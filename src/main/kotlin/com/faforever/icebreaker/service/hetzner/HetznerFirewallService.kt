@@ -7,6 +7,7 @@ import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.Firewall
 import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.FirewallRule.Protocol
 import io.quarkus.scheduler.Scheduled
 import io.smallrye.mutiny.Uni
+import io.smallrye.mutiny.infrastructure.Infrastructure
 import io.vertx.core.json.JsonObject
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.inject.Singleton
@@ -82,30 +83,36 @@ class HetznerFirewallService(
     /** Whitelists [ipAddress] for session [sessionId]. */
     fun whitelistIpForSession(sessionId: String, userId: Long, ipAddress: String): Uni<Unit> {
         LOG.debug("Whitelisting IP {} for session {} in Hetzner cloud firewall", ipAddress, sessionId)
-        repository.persistOrGet(
-            FirewallWhitelistEntity(
-                userId = userId,
-                sessionId = sessionId,
-                allowedIp = ipAddress,
-                createdAt = clock.instant(),
-                deletedAt = null,
-            ),
-        )
-        return syncFirewall()
+        return Uni.createFrom().item {
+            repository.persistOrGet(
+                FirewallWhitelistEntity(
+                    userId = userId,
+                    sessionId = sessionId,
+                    allowedIp = ipAddress,
+                    createdAt = clock.instant(),
+                    deletedAt = null,
+                ),
+            )
+        }.runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
+            .flatMap { syncFirewall() }
     }
 
     /** Removes all whitelists for session [sessionId]. */
     fun removeWhitelistsForSession(sessionId: String): Uni<Unit> {
         LOG.debug("Removing whitelist for session {}", sessionId)
-        repository.markSessionAsDeleted(sessionId)
-        return syncFirewall()
+        return Uni.createFrom().item {
+            repository.markSessionAsDeleted(sessionId)
+        }.runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
+            .flatMap { syncFirewall() }
     }
 
     /** Removes only the whitelist for user [userId] in session [sessionId]. */
     fun removeWhitelistForSessionUser(userId: Long, sessionId: String): Uni<Unit> {
         LOG.debug("Removing user {}'s whitelist for session {}", userId, sessionId)
-        repository.markSessionUserAsDeleted(sessionId, userId)
-        return syncFirewall()
+        return Uni.createFrom().item {
+            repository.markSessionUserAsDeleted(sessionId, userId)
+        }.runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
+            .flatMap { syncFirewall() }
     }
 
     /**
