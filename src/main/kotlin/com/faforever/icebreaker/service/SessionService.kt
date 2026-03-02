@@ -205,11 +205,6 @@ class SessionService(
             activeSessionHandlers.forEach { it.deletePeerSession(sessionId, currentUserId).await().atMost(Duration.ofSeconds(10)) }
         }
 
-        val sessionId = buildSessionId(gameId)
-        if (eventMessage is PeerClosingMessage) {
-            activeSessionHandlers.forEach { it.deletePeerSession(sessionId, currentUserId) }
-        }
-
         rabbitmqEventEmitter.send(eventMessage)
     }
 

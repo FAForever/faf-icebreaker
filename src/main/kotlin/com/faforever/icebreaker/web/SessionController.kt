@@ -19,7 +19,6 @@ import jakarta.ws.rs.core.Context
 import jakarta.ws.rs.core.MediaType
 import org.jboss.resteasy.reactive.RestPath
 import org.jboss.resteasy.reactive.RestStreamElementType
-import java.net.InetAddress
 
 @Path("/session")
 @Singleton
@@ -53,7 +52,7 @@ class SessionController(
     @PermissionsAllowed("USER:lobby")
     fun getSession(
         @RestPath gameId: Long,
-    ): Session = sessionService.getSession(gameId, httpRequest.getIp().getHostAddress())
+    ): Session = sessionService.getSession(gameId)
 
     @GET
     @Produces(MEDIA_TYPE_JSON_API)
@@ -93,7 +92,4 @@ class SessionController(
     fun postLogs(@RestPath gameId: Long, logRequest: List<LogMessage>) {
         sessionService.onLogsPushed(gameId, logRequest)
     }
-
-    private fun HttpServerRequest.getIp() =
-        InetAddress.getByName(getHeader(fafProperties.realIpHeader()) ?: remoteAddress().host())
 }
