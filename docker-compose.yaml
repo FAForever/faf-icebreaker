@@ -17,6 +17,7 @@ services:
       RABBITMQ_DEFAULT_PASS: banana
     ports:
       - "5672:5672"
+      - "15672:15672"
 
   loki:
     image: docker.io/grafana/loki

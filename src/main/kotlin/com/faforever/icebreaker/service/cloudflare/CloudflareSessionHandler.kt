@@ -4,7 +4,6 @@ import com.faforever.icebreaker.config.FafProperties
 import com.faforever.icebreaker.service.Server
 import com.faforever.icebreaker.service.Session
 import com.faforever.icebreaker.service.SessionHandler
-import io.smallrye.mutiny.Uni
 import jakarta.annotation.PostConstruct
 import jakarta.enterprise.context.ApplicationScoped
 import org.slf4j.Logger
@@ -30,19 +29,16 @@ class CloudflareSessionHandler(
         LOG.info("CloudflareSessionHandler active: $active, turnEnabled: $turnEnabled")
     }
 
-    override fun createSession(id: String, userId: Long, clientIp: String): Uni<Unit> {
+    override fun createSession(id: String, userId: Long, clientIp: String) {
         // Cloudflare has no session handling, we use global access
-        return Uni.createFrom().nullItem()
     }
 
-    override fun deleteSession(id: String): Uni<Unit> {
+    override fun deleteSession(id: String) {
         // Cloudflare has no session handling, we use global access
-        return Uni.createFrom().nullItem()
     }
 
-    override fun deletePeerSession(id: String, userId: Long): Uni<Unit> {
+    override fun deletePeerSession(id: String, userId: Long) {
         // Cloudflare has no session handling, we use global access
-        return Uni.createFrom().nullItem()
     }
 
     override fun getIceServers() = listOf(Server(id = SERVER_NAME, region = "Global"))

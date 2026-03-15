@@ -6,8 +6,6 @@ import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.Firewall
 import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.FirewallRule.Direction
 import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.FirewallRule.Protocol
 import io.quarkus.scheduler.Scheduled
-import io.smallrye.mutiny.Uni
-import io.smallrye.mutiny.infrastructure.Infrastructure
 import io.vertx.core.json.JsonObject
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.inject.Singleton
@@ -22,13 +20,12 @@ import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.InetAddress
 import java.time.Clock
-import java.time.Duration
-import java.util.Queue
-import java.util.UUID
+import java.util.*
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionStage
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.TimeUnit
 import kotlin.jvm.optionals.getOrNull
 
 private val LOG: Logger = LoggerFactory.getLogger(HetznerFirewallService::class.java)
@@ -81,38 +78,32 @@ class HetznerFirewallService(
     private val awaitedMessagesById = ConcurrentHashMap<String, CompletableFuture<Unit>>()
 
     /** Whitelists [ipAddress] for session [sessionId]. */
-    fun whitelistIpForSession(sessionId: String, userId: Long, ipAddress: String): Uni<Unit> {
+    fun whitelistIpForSession(sessionId: String, userId: Long, ipAddress: String) {
         LOG.debug("Whitelisting IP {} for session {} in Hetzner cloud firewall", ipAddress, sessionId)
-        return Uni.createFrom().item {
-            repository.persistOrGet(
-                FirewallWhitelistEntity(
-                    userId = userId,
-                    sessionId = sessionId,
-                    allowedIp = ipAddress,
-                    createdAt = clock.instant(),
-                    deletedAt = null,
-                ),
-            )
-        }.runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
-            .flatMap { syncFirewall() }
+        repository.persistOrGet(
+            FirewallWhitelistEntity(
+                userId = userId,
+                sessionId = sessionId,
+                allowedIp = ipAddress,
+                createdAt = clock.instant(),
+                deletedAt = null,
+            ),
+        )
+        syncFirewall()
     }
 
     /** Removes all whitelists for session [sessionId]. */
-    fun removeWhitelistsForSession(sessionId: String): Uni<Unit> {
+    fun removeWhitelistsForSession(sessionId: String) {
         LOG.debug("Removing whitelist for session {}", sessionId)
-        return Uni.createFrom().item {
-            repository.markSessionAsDeleted(sessionId)
-        }.runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
-            .flatMap { syncFirewall() }
+        repository.markSessionAsDeleted(sessionId)
+        syncFirewall()
     }
 
     /** Removes only the whitelist for user [userId] in session [sessionId]. */
-    fun removeWhitelistForSessionUser(userId: Long, sessionId: String): Uni<Unit> {
+    fun removeWhitelistForSessionUser(userId: Long, sessionId: String) {
         LOG.debug("Removing user {}'s whitelist for session {}", userId, sessionId)
-        return Uni.createFrom().item {
-            repository.markSessionUserAsDeleted(sessionId, userId)
-        }.runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
-            .flatMap { syncFirewall() }
+        repository.markSessionUserAsDeleted(sessionId, userId)
+        syncFirewall()
     }
 
     /**
@@ -121,17 +112,14 @@ class HetznerFirewallService(
      * The returned Uni is completed by [handle] when it receives a message indicating
      * that the requested sync has been successfully completed.
      */
-    private fun syncFirewall(): Uni<Unit> {
+    private fun syncFirewall() {
         val requestId = UUID.randomUUID().toString()
         val future = CompletableFuture<Unit>()
         awaitedMessagesById[requestId] = future
-        requestEmitter.send(SyncMessage(requestId))
-        return Uni.createFrom().completionStage(future)
-            .ifNoItem().after(Duration.ofSeconds(10)).fail()
-            .onFailure().invoke { e ->
-                LOG.error("Failed to sync firewall rule for request id {}", requestId, e)
+        requestEmitter.send(SyncMessage(requestId)).thenCompose { future }.toCompletableFuture()
+            .orTimeout(10, TimeUnit.SECONDS).whenComplete { _, _ ->
                 awaitedMessagesById.remove(requestId)
-            }
+            }.join()
     }
 
     @Incoming("hetzner-response-in")
@@ -145,7 +133,7 @@ class HetznerFirewallService(
 }
 
 @ApplicationScoped
-private class HetznerFirewallUpdater(
+internal class HetznerFirewallUpdater(
     private val hetznerProperties: HetznerProperties,
     private val repository: FirewallWhitelistRepository,
     @param:RestClient private val hetznerClient: HetznerApiClient,
@@ -155,6 +143,8 @@ private class HetznerFirewallUpdater(
 
     // Requests waiting to be resolved the next time [syncFirewallWithHetzner] runs.
     private val requestQueue = ConcurrentLinkedQueue<BufferedMessage>()
+
+    internal fun numPendingRequests() = requestQueue.size
 
     @Incoming("hetzner-request-in")
     fun handle(json: JsonObject): CompletionStage<Unit> {
@@ -218,27 +208,24 @@ private class HetznerFirewallUpdater(
     }
 
     private fun buildSetFirewallRequest(): SetFirewallRulesRequest {
-        val sourceIps = repository.getAllActive().mapNotNull { entry ->
-            entry.allowedIp.trim().toCidr()
-        }.distinct()
+        val sourceIps = repository.getAllActive().mapNotNull { entry -> entry.allowedIp.trim().toCidr() }.distinct()
         val sourceBlocks: List<List<String>> = sourceIps.chunked(hetznerProperties.maxIpsPerRule())
-        val rules =
-            sourceBlocks.flatMap { sources ->
-                listOf(
-                    // We don't specify the ports for either rule, because the port might
-                    // be different on each TURN server.
-                    FirewallRule(
-                        direction = Direction.IN,
-                        sourceIps = sources,
-                        protocol = Protocol.TCP,
-                    ),
-                    FirewallRule(
-                        direction = Direction.IN,
-                        sourceIps = sources,
-                        protocol = Protocol.UDP,
-                    ),
-                )
-            }
+        val rules = sourceBlocks.flatMap { sources ->
+            listOf(
+                // We don't specify the ports for either rule, because the port might
+                // be different on each TURN server.
+                FirewallRule(
+                    direction = Direction.IN,
+                    sourceIps = sources,
+                    protocol = Protocol.TCP,
+                ),
+                FirewallRule(
+                    direction = Direction.IN,
+                    sourceIps = sources,
+                    protocol = Protocol.UDP,
+                ),
+            )
+        }
         val request = SetFirewallRulesRequest(rules)
         LOG.debug("Hetzner request summary: rules={}, totalSourceIps={}", rules.size, sourceIps.size)
         return request

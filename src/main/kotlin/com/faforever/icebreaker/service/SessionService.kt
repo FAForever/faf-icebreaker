@@ -29,7 +29,6 @@ import org.eclipse.microprofile.reactive.messaging.Incoming
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.time.Clock
-import java.time.Duration
 import java.time.temporal.ChronoUnit
 
 private val LOG: Logger = LoggerFactory.getLogger(SessionService::class.java)
@@ -43,7 +42,7 @@ class SessionService(
     private val securityIdentity: SecurityIdentity,
     private val currentUserService: CurrentUserService,
     private val objectMapper: ObjectMapper,
-    @Channel("events-out")
+    @param:Channel("events-out")
     private val rabbitmqEventEmitter: Emitter<EventMessage>,
     private val lokiService: LokiService,
     private val clock: Clock,
@@ -92,7 +91,7 @@ class SessionService(
         val currentUserIp = currentUserService.getCurrentUserIp()
         val servers =
             activeSessionHandlers.flatMap {
-                it.createSession(sessionId, currentUserId, currentUserIp).await().atMost(Duration.ofSeconds(10))
+                it.createSession(sessionId, currentUserId, currentUserIp)
                 it.getIceServersSession(sessionId)
             }
 
@@ -123,7 +122,7 @@ class SessionService(
                     ),
                 )
             } catch (e: Exception) {
-                LOG.warn("Unable to persist session details for game id $gameId and session id $sessionId")
+                LOG.warn("Unable to persist session details for game id $gameId and session id $sessionId", e)
             }
         }
     }
@@ -140,7 +139,7 @@ class SessionService(
                 instant = cleanupTime,
             ).forEach { iceSession ->
                 LOG.debug("Cleaning up session id ${iceSession.id}")
-                activeSessionHandlers.forEach { it.deleteSession(iceSession.id).await().atMost(Duration.ofSeconds(10)) }
+                activeSessionHandlers.forEach { it.deleteSession(iceSession.id) }
 
                 gameUserStatsRepository.deleteByGameId(iceSession.gameId)
                 iceSessionRepository.delete(iceSession)
@@ -202,7 +201,7 @@ class SessionService(
 
         val sessionId = buildSessionId(gameId)
         if (eventMessage is PeerClosingMessage) {
-            activeSessionHandlers.forEach { it.deletePeerSession(sessionId, currentUserId).await().atMost(Duration.ofSeconds(10)) }
+            activeSessionHandlers.forEach { it.deletePeerSession(sessionId, currentUserId) }
         }
 
         rabbitmqEventEmitter.send(eventMessage)
