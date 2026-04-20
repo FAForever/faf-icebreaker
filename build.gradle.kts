@@ -46,6 +46,10 @@ dependencies {
     implementation("com.maxmind.geoip2:geoip2:4.4.0")
     testImplementation("io.quarkus:quarkus-junit5")
     testImplementation("io.rest-assured:rest-assured")
+    testImplementation("org.assertj:assertj-core:3.27.6")
+    testImplementation("io.quarkus:quarkus-test-security")
+    testImplementation("io.quarkus:quarkus-test-security-jwt")
+    testImplementation("io.quarkus:quarkus-junit5-mockito")
 }
 
 group = "com.faforever.icebreaker"

@@ -44,6 +44,8 @@ quarkus:
   rest-client:
     loki:
       url: ${LOKI_BASE_URL:http://localhost:3100}
+    hetzner:
+      url: ${HETZNER_BASE_URL:https://api.hetzner.cloud/v1}
   swagger-ui:
     always-include: true
     path: "/q/swagger-ui"
@@ -72,6 +74,10 @@ cloudflare:
 loki:
   app-identifier: "faf-pioneer"
   enabled: ${LOKI_ENABLED:true}
+hetzner:
+  firewall-id: ${HETZNER_FIREWALL_ID}
+  max-ips-per-rule: 100
+  api-key: ${HETZNER_API_KEY}
 smallrye:
   jwt:
     sign:
@@ -88,12 +94,36 @@ mp:
           exclusive: true
         exchange:
           name: ice
+      hetzner-request-in:
+        connector: smallrye-rabbitmq
+        virtual-host: ${RABBITMQ_VHOST:/faf-core}
+        queue:
+          name: hetzner-request-queue
+          single-active-consumer: true
+        exchange:
+          name: hetzner-request-exchange
+      hetzner-response-in:
+        connector: smallrye-rabbitmq
+        virtual-host: ${RABBITMQ_VHOST:/faf-core}
+        queue: hetzner-response-queue
+        exchange:
+          name: hetzner-response-exchange
     outgoing:
       events-out:
         connector: smallrye-rabbitmq
         virtual-host: ${RABBITMQ_VHOST:/faf-core}
         exchange:
           name: ice
+      hetzner-request-out:
+        connector: smallrye-rabbitmq
+        virtual-host: ${RABBITMQ_VHOST:/faf-core}
+        exchange:
+          name: hetzner-request-exchange
+      hetzner-response-out:
+        connector: smallrye-rabbitmq
+        virtual-host: ${RABBITMQ_VHOST:/faf-core}
+        exchange:
+          name: hetzner-response-exchange
 
 rabbitmq-host: ${RABBITMQ_HOST:localhost}
 rabbitmq-port: ${RABBITMQ_PORT:5672}
@@ -105,6 +135,9 @@ rabbitmq-password: ${RABBITMQ_PASSWORD:banana}
     enabled: ${XIRSYS_ENABLED:false}
   cloudflare:
     enabled: ${CLOUDFLARE_ENABLED:false}
+  hetzner:
+    max-ips-per-rule: 100
+    api-key: ${HETZNER_API_KEY:"fake"}
   smallrye:
     jwt:
       sign:
@@ -139,6 +172,11 @@ rabbitmq-password: ${RABBITMQ_PASSWORD:banana}
           i8UgZE7+lTYKv7+4ujmgHw==
           -----END PRIVATE KEY-----
   quarkus:
+    arc:
+      selected-alternatives:
+        # Comment out to enable calling the Hetzner API in dev.
+        # You will need to set the HETZNER_BASE_URL environment variable.
+        - StubHetznerApiClient
     oidc:
      self-tenant:
        public-key: |-
@@ -166,7 +204,12 @@ rabbitmq-password: ${RABBITMQ_PASSWORD:banana}
     enabled: false
   cloudflare:
     enabled: false
+  hetzner:
+    api-key: "fake"
   quarkus:
+    arc:
+      selected-alternatives:
+        - StubHetznerApiClient
     oidc:
       auth-server-url: https://hydra.faforever.com
       self-tenant:

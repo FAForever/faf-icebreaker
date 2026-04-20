@@ -29,11 +29,15 @@ class CloudflareSessionHandler(
         LOG.info("CloudflareSessionHandler active: $active, turnEnabled: $turnEnabled")
     }
 
-    override fun createSession(id: String) {
+    override fun createSession(id: String, userId: Long, clientIp: String) {
         // Cloudflare has no session handling, we use global access
     }
 
     override fun deleteSession(id: String) {
+        // Cloudflare has no session handling, we use global access
+    }
+
+    override fun deletePeerSession(id: String, userId: Long) {
         // Cloudflare has no session handling, we use global access
     }
 
