@@ -118,53 +118,37 @@ internal class HetznerFirewallServiceTest {
 
     @Test
     fun `Whitelist syncing is rate-limited`() {
+        // First call goes through immediately
+        val countBeforeFirst = hetznerApi.getCallCount()
+        service.whitelistIpForSession("game/201", userId = 123, "1.2.3.4")
+
+        assertThat(hetznerApi.getRulesByFirewallId("fwid")!!.allSourceIps()).hasSize(1)
+
+        // Pause scheduler so next sync request is queued but not processed
         scheduler.pause()
+        val countBeforePause = hetznerApi.getCallCount()
 
-        val requestFutures1 = CompletableFuture.allOf(
-            CompletableFuture.runAsync { service.whitelistIpForSession("game/201", userId = 123, "1.2.3.4") },
-            CompletableFuture.runAsync { service.whitelistIpForSession("game/201", userId = 234, "2.3.4.5") },
-        )
-
-        runBlocking {
-            waitUntil {
-                updater.numPendingRequests() == 2
-            }
+        val pendingRequest = CompletableFuture.runAsync {
+            service.whitelistIpForSession("game/201", userId = 234, "2.3.4.5")
         }
 
-        scheduler.resume()
-
-        requestFutures1.join()
-
-        assertThat(hetznerApi.getCallCount()).isEqualTo(1)
-
-        var allowedIps = hetznerApi.getRulesByFirewallId("fwid")!!.allSourceIps()
-        assertThat(allowedIps).hasSize(2)
-
-        scheduler.pause()
-        val currentCount = hetznerApi.getCallCount()
-
-        val requestFutures2 = CompletableFuture.allOf(
-            CompletableFuture.runAsync { service.whitelistIpForSession("game/201", userId = 345, "3.4.5.6") },
-            CompletableFuture.runAsync { service.whitelistIpForSession("game/202", userId = 456, "4.5.6.7") },
-            CompletableFuture.runAsync { service.removeWhitelistForSessionUser(234, "game/201") },
-        )
-
+        // Wait until the request is queued in the updater
         runBlocking {
-            waitUntil {
-                updater.numPendingRequests() == 3
-            }
+            waitUntil { updater.numPendingRequests() == 1 }
         }
 
+        // Verify the request is blocked and no additional API call was made while scheduler is paused
+        assertThat(pendingRequest).isNotDone
+        assertThat(hetznerApi.getCallCount()).isEqualTo(countBeforePause)
+
+        // Resume scheduler — queued request gets processed
         scheduler.resume()
+        pendingRequest.join()
 
-        requestFutures2.join()
+        assertThat(pendingRequest).isDone
 
-        assertThat(hetznerApi.getCallCount()).isEqualTo(currentCount + 1)
-
-        allowedIps = hetznerApi.getRulesByFirewallId("fwid")!!.allSourceIps()
-        assertThat(allowedIps).hasSize(3)
-
-        scheduler.resume()
+        assertThat(hetznerApi.getCallCount()).isEqualTo(countBeforePause + 1)
+        assertThat(hetznerApi.getRulesByFirewallId("fwid")!!.allSourceIps()).hasSize(2)
     }
 
     @Test

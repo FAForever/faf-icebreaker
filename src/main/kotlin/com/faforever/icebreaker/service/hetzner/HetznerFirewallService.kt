@@ -113,6 +113,7 @@ class HetznerFirewallService(
      * that the requested sync has been successfully completed.
      */
     private fun syncFirewall() {
+        LOG.info("Requesting Hetzner cloud firewall rules to be updated")
         val requestId = UUID.randomUUID().toString()
         val future = CompletableFuture<Unit>()
         awaitedMessagesById[requestId] = future
@@ -127,6 +128,7 @@ class HetznerFirewallService(
         val response = json.mapTo(SyncMessage::class.java)
         // The message is a response to a previous request; we
         // complete the future that that request is waiting for.
+        LOG.trace("Received Hetzner response for request {}", response.id)
         awaitedMessagesById.remove(response.id)?.complete(Unit)
         // The response is acked when this function returns
     }
