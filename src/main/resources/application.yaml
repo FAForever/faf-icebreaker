@@ -35,6 +35,9 @@ quarkus:
         healthcheck:
           paths: "/q/health"
           policy: permit
+        metrics:
+          paths: "/q/metrics"
+          policy: permit
         openapi:
           paths: "/q/openapi, /q/swagger-ui, /q/swagger-ui/*"
           policy: permit

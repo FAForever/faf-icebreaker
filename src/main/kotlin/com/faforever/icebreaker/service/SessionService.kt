@@ -11,6 +11,7 @@ import com.faforever.icebreaker.service.loki.LokiService
 import com.faforever.icebreaker.util.AsyncRunner
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.convertValue
+import io.micrometer.core.instrument.MeterRegistry
 import io.quarkus.scheduler.Scheduled
 import io.quarkus.security.ForbiddenException
 import io.quarkus.security.identity.SecurityIdentity
@@ -30,6 +31,7 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.time.Clock
 import java.time.temporal.ChronoUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 private val LOG: Logger = LoggerFactory.getLogger(SessionService::class.java)
 
@@ -46,10 +48,21 @@ class SessionService(
     private val rabbitmqEventEmitter: Emitter<EventMessage>,
     private val lokiService: LokiService,
     private val clock: Clock,
+    meterRegistry: MeterRegistry,
 ) {
     private val activeSessionHandlers = sessionHandlers.filter { it.active }
     private val localEventEmitter = MultiEmitterProcessor.create<EventMessage>()
     private val localEventBroadcast: Multi<EventMessage> = localEventEmitter.toMulti().broadcast().toAllSubscribers()
+
+    /**
+     * Number of currently active SSE event subscriptions (see [listenForEventMessages]).
+     *
+     * Exposed as the `icebreaker_sse_active_subscribers` gauge so we can watch for a
+     * monotonically climbing subscriber count, which would confirm that disconnected clients
+     * are not being released (see issue #134).
+     */
+    private val activeSubscriberCount =
+        meterRegistry.gauge("icebreaker.sse.active_subscribers", AtomicInteger(0))!!
 
     fun buildToken(gameId: Long): String {
         val userId = securityIdentity.getUserId()
@@ -181,6 +194,12 @@ class SessionService(
 
             localEventBroadcast
                 .filter { event -> event.gameId == gameId && (event.recipientId == userId || (event.recipientId == null && event.senderId != userId)) }
+        }.onSubscription().invoke { _ ->
+            val active = activeSubscriberCount.incrementAndGet()
+            LOG.debug("Event subscriber added for gameId {} userId {}, active subscribers: {}", gameId, userId, active)
+        }.onTermination().invoke { _, _ ->
+            val active = activeSubscriberCount.decrementAndGet()
+            LOG.debug("Event subscriber removed for gameId {} userId {}, active subscribers: {}", gameId, userId, active)
         }
     }
 
