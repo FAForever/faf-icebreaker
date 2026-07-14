@@ -24,6 +24,7 @@ data class TurnServerEntity(
     val presharedKey: String,
     val contactEmail: String,
     val active: Boolean,
+    val hetznerFirewall: Boolean,
 ) : PanacheEntityBase
 
 @Singleton

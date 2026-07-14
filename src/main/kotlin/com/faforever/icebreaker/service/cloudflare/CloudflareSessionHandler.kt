@@ -29,10 +29,6 @@ class CloudflareSessionHandler(
         LOG.info("CloudflareSessionHandler active: $active, turnEnabled: $turnEnabled")
     }
 
-    override fun createSession(id: String, userId: Long, clientIp: String) {
-        // Cloudflare has no session handling, we use global access
-    }
-
     override fun deleteSession(id: String) {
         // Cloudflare has no session handling, we use global access
     }
@@ -43,11 +39,13 @@ class CloudflareSessionHandler(
 
     override fun getIceServers() = listOf(Server(id = SERVER_NAME, region = "Global"))
 
-    override fun getIceServersSession(sessionId: String): List<Session.Server> =
+    // Cloudflare has no session handling (we use global access), so we simply request
+    // credentials and return the servers.
+    override fun createSession(id: String, userId: Long, clientIp: String): List<Session.Server> =
         cloudflareApiAdapter.requestIceServers(
             credentialRequest = CloudflareApiClient.CredentialRequest(
                 ttl = fafProperties.tokenLifetimeSeconds(),
-                customIdentifier = sessionId,
+                customIdentifier = id,
             ),
         ).let {
             listOf(
