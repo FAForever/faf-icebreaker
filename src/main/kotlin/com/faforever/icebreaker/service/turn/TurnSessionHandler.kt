@@ -34,19 +34,23 @@ class TurnSessionHandler(
         LOG.info("TurnSessionHandler active: $active")
     }
 
-    override fun createSession(id: String, userId: Long, clientIp: String) = hetznerFirewallService.whitelistIpForSession(id, userId, clientIp)
+    override fun createSession(id: String, userId: Long, clientIp: String): List<Session.Server> {
+        val firewallSynced =
+            try {
+                hetznerFirewallService.whitelistIpForSession(id, userId, clientIp)
+                true
+            } catch (e: Exception) {
+                LOG.warn("Failed to sync Hetzner firewall for session {}; omitting firewalled TURN servers", id, e)
+                false
+            }
 
-    override fun deleteSession(id: String) = hetznerFirewallService.removeWhitelistsForSession(id)
-
-    override fun deletePeerSession(id: String, userId: Long) = hetznerFirewallService.removeWhitelistForSessionUser(sessionId = id, userId = userId)
-
-    override fun getIceServers() = turnServerRepository.findActive().map { Server(id = it.host, region = it.region) }
-
-    override fun getIceServersSession(sessionId: String): List<Session.Server> =
-        turnServerRepository
+        return turnServerRepository
             .findActive()
+            // On firewall sync failure, the client's IP isn't whitelisted, so it can't
+            // reach the firewalled servers. Omit those but keep the non-firewalled ones.
+            .filter { firewallSynced || !it.hetznerFirewall }
             .map {
-                val (tokenName, tokenSecret) = buildHmac(sessionId, securityIdentity.getUserId(), it.presharedKey)
+                val (tokenName, tokenSecret) = buildHmac(id, securityIdentity.getUserId(), it.presharedKey)
                 Session.Server(
                     id = it.host,
                     username = tokenName,
@@ -54,6 +58,13 @@ class TurnSessionHandler(
                     urls = buildUrls(turnServer = it),
                 )
             }
+    }
+
+    override fun deleteSession(id: String) = hetznerFirewallService.removeWhitelistsForSession(id)
+
+    override fun deletePeerSession(id: String, userId: Long) = hetznerFirewallService.removeWhitelistForSessionUser(sessionId = id, userId = userId)
+
+    override fun getIceServers() = turnServerRepository.findActive().map { Server(id = it.host, region = it.region) }
 
     private fun buildHmac(
         sessionName: String,

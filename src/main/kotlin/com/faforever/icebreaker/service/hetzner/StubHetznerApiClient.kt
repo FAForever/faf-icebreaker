@@ -4,6 +4,7 @@ import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.Firewall
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.inject.Alternative
 import org.eclipse.microprofile.rest.client.inject.RestClient
+import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -17,9 +18,16 @@ class StubHetznerApiClient : HetznerApiClient {
     private val callCount = AtomicInteger(0)
     private val rulesByFirewallId: MutableMap<String, List<FirewallRule>> = ConcurrentHashMap()
 
+    /** When set, [setFirewallRules] throws to simulate a failing Hetzner API (e.g. a 403). */
+    @Volatile
+    var failRequests: Boolean = false
+
     override fun setFirewallRules(id: String, request: SetFirewallRulesRequest): SetFirewallRulesResponse {
-        rulesByFirewallId[id] = request.rules
         callCount.incrementAndGet()
+        if (failRequests) {
+            throw IOException("Simulated Hetzner API failure")
+        }
+        rulesByFirewallId[id] = request.rules
         return SetFirewallRulesResponse(listOf())
     }
 
@@ -29,5 +37,11 @@ class StubHetznerApiClient : HetznerApiClient {
 
     fun resetCallCount() {
         callCount.set(0)
+    }
+
+    fun reset() {
+        callCount.set(0)
+        rulesByFirewallId.clear()
+        failRequests = false
     }
 }

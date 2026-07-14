@@ -29,9 +29,10 @@ class XirsysSessionHandler(
         LOG.info("XirsysSessionHandler active: $active, turnEnabled: $turnEnabled")
     }
 
-    override fun createSession(id: String, userId: Long, clientIp: String) {
+    override fun createSession(id: String, userId: Long, clientIp: String): List<Session.Server> {
         LOG.debug("Creating session id $id")
         xirsysApiAdapter.createChannel(id)
+        return requestIceServers(id)
     }
 
     override fun deleteSession(id: String) {
@@ -45,7 +46,7 @@ class XirsysSessionHandler(
 
     override fun getIceServers() = listOf(Server(id = SERVER_NAME, region = "Global"))
 
-    override fun getIceServersSession(sessionId: String): List<Session.Server> = xirsysApiAdapter.requestIceServers(
+    private fun requestIceServers(sessionId: String): List<Session.Server> = xirsysApiAdapter.requestIceServers(
         channelName = sessionId,
         turnRequest = TurnRequest(expire = fafProperties.tokenLifetimeSeconds()),
     ).iceServers.let {

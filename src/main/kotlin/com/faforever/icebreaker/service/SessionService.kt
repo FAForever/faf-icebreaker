@@ -103,9 +103,13 @@ class SessionService(
         val currentUserId = currentUserService.requireCurrentUserId()
         val currentUserIp = currentUserService.getCurrentUserIp()
         val servers =
-            activeSessionHandlers.flatMap {
-                it.createSession(sessionId, currentUserId, currentUserIp)
-                it.getIceServersSession(sessionId)
+            activeSessionHandlers.flatMap { handler ->
+                try {
+                    handler.createSession(sessionId, currentUserId, currentUserIp)
+                } catch (e: Exception) {
+                    LOG.warn("Session handler {} failed to create a session; omitting its servers", handler::class.simpleName, e)
+                    emptyList()
+                }
             }
 
         AsyncRunner.runLater {
@@ -152,7 +156,13 @@ class SessionService(
                 instant = cleanupTime,
             ).forEach { iceSession ->
                 LOG.debug("Cleaning up session id ${iceSession.id}")
-                activeSessionHandlers.forEach { it.deleteSession(iceSession.id) }
+                activeSessionHandlers.forEach { handler ->
+                    try {
+                        handler.deleteSession(iceSession.id)
+                    } catch (e: Exception) {
+                        LOG.warn("Session handler {} failed to delete session {}; continuing cleanup", handler::class.simpleName, iceSession.id, e)
+                    }
+                }
 
                 gameUserStatsRepository.deleteByGameId(iceSession.gameId)
                 iceSessionRepository.delete(iceSession)
@@ -220,7 +230,13 @@ class SessionService(
 
         val sessionId = buildSessionId(gameId)
         if (eventMessage is PeerClosingMessage) {
-            activeSessionHandlers.forEach { it.deletePeerSession(sessionId, currentUserId) }
+            activeSessionHandlers.forEach { handler ->
+                try {
+                    handler.deletePeerSession(sessionId, currentUserId)
+                } catch (e: Exception) {
+                    LOG.warn("Session handler {} failed to delete peer session for {}; ignoring", handler::class.simpleName, sessionId, e)
+                }
+            }
         }
 
         rabbitmqEventEmitter.send(eventMessage)

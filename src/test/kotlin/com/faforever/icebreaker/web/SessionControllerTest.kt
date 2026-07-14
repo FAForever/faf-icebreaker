@@ -3,15 +3,18 @@ package com.faforever.icebreaker.web
 import com.faforever.icebreaker.persistence.FirewallWhitelistRepository
 import com.faforever.icebreaker.persistence.TurnServerEntity
 import com.faforever.icebreaker.persistence.TurnServerRepository
+import com.faforever.icebreaker.service.hetzner.StubHetznerApiClient
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import jakarta.inject.Inject
 import jakarta.transaction.Transactional
 import org.assertj.core.api.Assertions.assertThat
+import org.eclipse.microprofile.rest.client.inject.RestClient
 import org.hamcrest.Matchers.emptyString
 import org.hamcrest.Matchers.equalTo
 import org.hamcrest.Matchers.greaterThan
 import org.hamcrest.Matchers.not
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
@@ -25,6 +28,10 @@ class SessionControllerTest {
 
     @Inject
     lateinit var firewallWhitelistRepository: FirewallWhitelistRepository
+
+    @Inject
+    @RestClient
+    lateinit var hetznerApi: StubHetznerApiClient
 
     val gameId = 100L
     val testJwt = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxIiwiZXh0Ijp7InJvbGVzIjpbIlVTRVIiXSwiZ2FtZUlkIjoxMDB9LCJzY3AiOlsibG9iYnkiXSwiaXNzIjoiaHR0cHM6Ly9pY2UuZmFmb3JldmVyLmNvbSIsImF1ZCI6Imh0dHBzOi8vaWNlLmZhZm9yZXZlci5jb20iLCJleHAiOjIwMDAwMDAwMDAsImlhdCI6MTc0MTAwMDAwMCwianRpIjoiMDE5YjBmMDYtOGJlYi00NzEyLWFiNWUtNGUyNmVjMTM0YjFlIn0.CHEtH0I-BacvjIc_a8ZSKcXMmRZqObGIqScs8BNbZrcje9GVvnTeJEkOxh3Lpo0C1Cm8_x_YQ-zilMTmVu87ZH31_FRYvJuaU9gjo3izmHcncWmSOpjg2n8BtkPXcnggdxM5DW7bPUytkgPGhvFUbeTNRw0Lv1Atb9L2NcW33jhQ-jz-3Ev0fVfgAzJMxrhDCpoCw4QMk6doEIbmJ0Egl1-9AHyr3jd1PXMQAI2K3dX2v0hUmOJ2MxClukUFXkXRp76ZJ9L594YU1gLlIprcuPtRQCIvgJ_gD2Cd6iPQHAUFFvNFmpyLVDU3fgrznWIRkcu2CWSlybhFHCvx5Eldhg"
@@ -46,6 +53,7 @@ class SessionControllerTest {
                 presharedKey = "test-preshared-key-123",
                 contactEmail = "test@example.com",
                 active = true,
+                hetznerFirewall = true,
             ),
         )
         turnServerRepository.persist(
@@ -60,6 +68,7 @@ class SessionControllerTest {
                 presharedKey = "test-preshared-key-456",
                 contactEmail = "test2@example.com",
                 active = true,
+                hetznerFirewall = false,
             ),
         )
         turnServerRepository.persist(
@@ -74,8 +83,14 @@ class SessionControllerTest {
                 presharedKey = "disabled-key",
                 contactEmail = "disabled@example.com",
                 active = false,
+                hetznerFirewall = true,
             ),
         )
+    }
+
+    @AfterEach
+    fun resetHetznerStub() {
+        hetznerApi.reset()
     }
 
     @Test
@@ -104,5 +119,21 @@ class SessionControllerTest {
         val allowedIps = firewallWhitelistRepository.getForSessionId("game/100")
         assertThat(allowedIps).hasSize(1)
         assertThat(allowedIps[0].allowedIp).isEqualTo("127.0.0.1")
+    }
+
+    @Test
+    fun `GET session-game-(game) omits firewalled servers when Hetzner sync fails`() {
+        hetznerApi.failRequests = true
+
+        given()
+            .header("Authorization", "Bearer $testJwt")
+            .`when`().get("/session/game/$gameId")
+            .then()
+            // The firewall sync fails, but the request still succeeds ...
+            .statusCode(200)
+            .body("id", equalTo("100"))
+            // ... returning only the non-firewalled server, omitting the firewalled one.
+            .body("servers.size()", equalTo(1))
+            .body("servers[0].id", equalTo("turn2.test.example.com"))
     }
 }

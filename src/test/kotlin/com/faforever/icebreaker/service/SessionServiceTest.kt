@@ -10,11 +10,13 @@ import io.quarkus.test.InjectMock
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.security.TestSecurity
 import io.quarkus.test.security.jwt.Claim
+import io.quarkus.test.security.jwt.ClaimType
 import io.quarkus.test.security.jwt.JwtSecurity
 import io.vertx.core.http.HttpServerRequest
 import jakarta.inject.Inject
 import kotlinx.coroutines.runBlocking
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatCode
 import org.eclipse.microprofile.rest.client.inject.RestClient
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -55,7 +57,7 @@ class SessionServiceTest {
             .thenReturn(testIp)
 
         iceSessionRepository.deleteAll()
-        hetznerApi.resetCallCount()
+        hetznerApi.reset()
         firewallWhitelistRepository.deleteAll()
     }
 
@@ -63,7 +65,7 @@ class SessionServiceTest {
     @JwtSecurity(
         claims = [
             Claim(key = "sub", value = "123"),
-            Claim(key = "scp", value = "[lobby]"),
+            Claim(key = "scp", value = """["lobby"]""", type = ClaimType.JSON_ARRAY),
             Claim(key = "ext", value = """{"roles":["USER"],"gameId":200}"""),
         ],
     )
@@ -80,7 +82,7 @@ class SessionServiceTest {
     @JwtSecurity(
         claims = [
             Claim(key = "sub", value = "123"),
-            Claim(key = "scp", value = "[lobby]"),
+            Claim(key = "scp", value = """["lobby"]""", type = ClaimType.JSON_ARRAY),
             Claim(key = "ext", value = """{"roles":["USER"],"gameId":201}"""),
         ],
     )
@@ -105,7 +107,7 @@ class SessionServiceTest {
     @JwtSecurity(
         claims = [
             Claim(key = "sub", value = "123"),
-            Claim(key = "scp", value = "[lobby]"),
+            Claim(key = "scp", value = """["lobby"]""", type = ClaimType.JSON_ARRAY),
             Claim(key = "ext", value = """{"roles":["USER"],"gameId":201}"""),
         ],
     )
@@ -128,7 +130,7 @@ class SessionServiceTest {
     @JwtSecurity(
         claims = [
             Claim(key = "sub", value = "123"),
-            Claim(key = "scp", value = "[lobby]"),
+            Claim(key = "scp", value = """["lobby"]""", type = ClaimType.JSON_ARRAY),
             Claim(key = "ext", value = """{"roles":["USER"],"gameId":201}"""),
         ],
     )
@@ -144,5 +146,21 @@ class SessionServiceTest {
 
         val whitelistedIps = hetznerApi.getRulesByFirewallId("fwid")!!.flatMap { it.sourceIps }.toSet()
         assertThat(whitelistedIps).contains("$testIp/32")
+    }
+
+    @TestSecurity(user = "testUser", roles = ["viewer"])
+    @JwtSecurity(
+        claims = [
+            Claim(key = "sub", value = "123"),
+            Claim(key = "scp", value = """["lobby"]""", type = ClaimType.JSON_ARRAY),
+            Claim(key = "ext", value = """{"roles":["USER"],"gameId":202}"""),
+        ],
+    )
+    @Test
+    fun `getSession succeeds when Hetzner firewall sync fails`() {
+        hetznerApi.failRequests = true
+
+        // The Hetzner sync fails, but the request must not blow up with a 500.
+        assertThatCode { service.getSession(202L) }.doesNotThrowAnyException()
     }
 }
