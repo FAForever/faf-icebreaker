@@ -16,6 +16,9 @@ quarkus:
         global: ignore
   flyway:
     migrate-at-start: true
+    # Allow rolling back to older app versions even if the database
+    # already contains newer (backward compatible) migrations.
+    ignore-migration-patterns: "*:future"
   oidc:
     auth-server-url: ${HYDRA_URL:https://hydra.faforever.com}
     # A tenant for our self-signed JWTs
