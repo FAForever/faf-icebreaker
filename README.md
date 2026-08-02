@@ -44,6 +44,13 @@ You can run your application in dev mode that enables live coding using:
 
 > **_NOTE:_**  Quarkus now ships with a Dev UI, which is available in dev mode only at http://localhost:8080/q/dev/.
 
+## API documentation
+
+The application exposes an OpenAPI spec and a Swagger UI for its REST endpoints. These are served without authentication and are enabled in all profiles (not just dev):
+
+* **Swagger UI:** http://localhost:8080/q/swagger-ui
+* **OpenAPI spec:** http://localhost:8080/q/openapi (append `?format=json` for JSON; the default is YAML)
+
 ## Running tests
 
 To run the tests, the backing services must be running and you need to build the quarkus app:
