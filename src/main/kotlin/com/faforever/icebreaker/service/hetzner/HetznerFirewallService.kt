@@ -5,6 +5,7 @@ import com.faforever.icebreaker.persistence.FirewallWhitelistRepository
 import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.FirewallRule
 import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.FirewallRule.Direction
 import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.FirewallRule.Protocol
+import com.fasterxml.jackson.databind.ObjectMapper
 import io.quarkus.scheduler.Scheduled
 import io.vertx.core.json.JsonObject
 import jakarta.enterprise.context.ApplicationScoped
@@ -140,6 +141,7 @@ internal class HetznerFirewallUpdater(
     private val repository: FirewallWhitelistRepository,
     @param:RestClient private val hetznerClient: HetznerApiClient,
     @param:Channel("hetzner-response-out") private val responseEmitter: Emitter<SyncMessage>,
+    private val objectMapper: ObjectMapper,
 ) {
     private data class BufferedMessage(val payload: SyncMessage, val ack: CompletableFuture<Unit>)
 
@@ -180,6 +182,10 @@ internal class HetznerFirewallUpdater(
         try {
             val request = buildSetFirewallRequest()
             LOG.info("Syncing {} rules with Hetzner firewall {}", request.rules.size, firewall)
+            // TEMPORARY (debugging Hetzner 403s): dump the exact JSON body we POST so it
+            // can be shared with Hetzner support. Uses the CDI ObjectMapper, i.e. the same
+            // serialization the REST client puts on the wire. Remove once resolved.
+            LOG.info("Hetzner set_rules payload for firewall {}: {}", firewall, objectMapper.writeValueAsString(request))
             val response = hetznerClient.setFirewallRules(firewall, request)
             // It is important that "no actions" is a success: it
             // could happen that a request thread updates the DB, then
