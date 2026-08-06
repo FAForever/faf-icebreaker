@@ -5,11 +5,11 @@ import com.faforever.icebreaker.persistence.FirewallWhitelistRepository
 import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.FirewallRule
 import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.FirewallRule.Direction
 import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.FirewallRule.Protocol
-import com.fasterxml.jackson.databind.ObjectMapper
 import io.quarkus.scheduler.Scheduled
 import io.vertx.core.json.JsonObject
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.inject.Singleton
+import jakarta.ws.rs.WebApplicationException
 import org.eclipse.microprofile.reactive.messaging.Channel
 import org.eclipse.microprofile.reactive.messaging.Emitter
 import org.eclipse.microprofile.reactive.messaging.Incoming
@@ -141,7 +141,6 @@ internal class HetznerFirewallUpdater(
     private val repository: FirewallWhitelistRepository,
     @param:RestClient private val hetznerClient: HetznerApiClient,
     @param:Channel("hetzner-response-out") private val responseEmitter: Emitter<SyncMessage>,
-    private val objectMapper: ObjectMapper,
 ) {
     private data class BufferedMessage(val payload: SyncMessage, val ack: CompletableFuture<Unit>)
 
@@ -182,11 +181,24 @@ internal class HetznerFirewallUpdater(
         try {
             val request = buildSetFirewallRequest()
             LOG.info("Syncing {} rules with Hetzner firewall {}", request.rules.size, firewall)
-            // TEMPORARY (debugging Hetzner 403s): dump the exact JSON body we POST so it
-            // can be shared with Hetzner support. Uses the CDI ObjectMapper, i.e. the same
-            // serialization the REST client puts on the wire. Remove once resolved.
-            LOG.info("Hetzner set_rules payload for firewall {}: {}", firewall, objectMapper.writeValueAsString(request))
+            // TEMPORARY (debugging Hetzner 403s): log the request *structure* to share with
+            // Hetzner support. We deliberately log only per-rule IP counts, never the IPs
+            // themselves - they are personal data (GDPR) and must not land in our logs.
+            // Remove once resolved.
+            val ruleSizes = request.rules.map { it.sourceIps.size }
+            LOG.info(
+                "Hetzner set_rules structure for firewall {}: ruleCount={}, totalSourceIpEntries={}, " +
+                    "sizeDistribution={}, perRule={}",
+                firewall,
+                request.rules.size,
+                ruleSizes.sum(),
+                ruleSizes.groupingBy { it }.eachCount(),
+                request.rules.map { "${it.direction}/${it.protocol}=${it.sourceIps.size}" },
+            )
             val response = hetznerClient.setFirewallRules(firewall, request)
+            // TEMPORARY (debugging Hetzner 403s): log the full parsed response. It contains
+            // only action metadata/errors, no IPs, so it is safe to log. Remove once resolved.
+            LOG.info("Hetzner set_rules response for firewall {}: {}", firewall, response)
             // It is important that "no actions" is a success: it
             // could happen that a request thread updates the DB, then
             // syncFirewallWithHetzner runs, then the request thread
@@ -209,6 +221,18 @@ internal class HetznerFirewallUpdater(
                 LOG.error("Failed to update Hetzner firewall rules: API request failed")
                 batch.forEach { it.ack.completeExceptionally(IOException("Hetzner API request failed")) }
             }
+        } catch (e: WebApplicationException) {
+            // TEMPORARY (debugging Hetzner 403s): a non-2xx response throws before the body is
+            // parsed, so read the raw error envelope (e.g. {"error":{"code":"forbidden",...}}).
+            // No IPs are echoed back, so it is safe to log. Remove once resolved.
+            val body = runCatching { e.response.readEntity(String::class.java) }.getOrNull()
+            LOG.error(
+                "Failed to update Hetzner firewall rules: status={}, responseBody={}",
+                e.response.status,
+                body,
+                e,
+            )
+            batch.forEach { it.ack.completeExceptionally(e) }
         } catch (e: Exception) {
             LOG.error("Failed to update Hetzner firewall rules", e)
             batch.forEach { it.ack.completeExceptionally(e) }
