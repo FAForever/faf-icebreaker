@@ -160,7 +160,7 @@ internal class HetznerFirewallUpdater(
 
     // We delay by 3s to make it more likely that RabbitMQ is running by the time this method
     // runs during integration tests. Otherwise, we get spurious errors logged.
-    @Scheduled(every = "1s", delayed = "3s", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
+    @Scheduled(every = "2s", delayed = "3s", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     fun syncFirewallWithHetzner() {
         val firewall = hetznerProperties.firewallId().getOrNull()
         val batch = takeAll(requestQueue)
