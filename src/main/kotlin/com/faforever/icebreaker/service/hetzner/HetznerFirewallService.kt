@@ -51,10 +51,12 @@ private fun String.toCidr(): String? = try {
     null
 }
 
-/** Requests a sync or confirms that the requested sync has been successfully completed. */
+/** Requests a sync or reports the outcome of a requested sync. */
 data class SyncMessage(
     /** A unique identifier for this request/response pair. Used to pair requests and responses. */
     val id: String,
+    /** A stable error message for failed responses; null for requests and successful responses. */
+    val error: String? = null,
 )
 
 /**
@@ -110,8 +112,7 @@ class HetznerFirewallService(
     /**
      * Asks [HetznerFirewallUpdater] via RabbitMQ to sync rules with Hetzner's API.
      *
-     * The returned Uni is completed by [handle] when it receives a message indicating
-     * that the requested sync has been successfully completed.
+     * The request completes when [handle] receives the sync outcome.
      */
     private fun syncFirewall() {
         LOG.info("Requesting Hetzner cloud firewall rules to be updated")
@@ -130,7 +131,12 @@ class HetznerFirewallService(
         // The message is a response to a previous request; we
         // complete the future that that request is waiting for.
         LOG.trace("Received Hetzner response for request {}", response.id)
-        awaitedMessagesById.remove(response.id)?.complete(Unit)
+        val future = awaitedMessagesById.remove(response.id)
+        if (response.error == null) {
+            future?.complete(Unit)
+        } else {
+            future?.completeExceptionally(IOException(response.error))
+        }
         // The response is acked when this function returns
     }
 }
@@ -166,10 +172,7 @@ internal class HetznerFirewallUpdater(
         val batch = takeAll(requestQueue)
 
         if (firewall == null) {
-            batch.forEach {
-                responseEmitter.send(it.payload)
-                it.ack.complete(Unit)
-            }
+            respond(batch)
             return
         }
 
@@ -213,13 +216,10 @@ internal class HetznerFirewallUpdater(
             val success = response.actions.all { it.error == null }
             if (success) {
                 LOG.info("Successfully updated Hetzner firewall rules")
-                batch.forEach {
-                    responseEmitter.send(it.payload)
-                    it.ack.complete(Unit)
-                }
+                respond(batch)
             } else {
                 LOG.error("Failed to update Hetzner firewall rules: API request failed")
-                batch.forEach { it.ack.completeExceptionally(IOException("Hetzner API request failed")) }
+                respondWithFailure(batch)
             }
         } catch (e: WebApplicationException) {
             // TEMPORARY (debugging Hetzner 403s): a non-2xx response throws before the body is
@@ -232,10 +232,26 @@ internal class HetznerFirewallUpdater(
                 body,
                 e,
             )
-            batch.forEach { it.ack.completeExceptionally(e) }
+            respondWithFailure(batch)
         } catch (e: Exception) {
             LOG.error("Failed to update Hetzner firewall rules", e)
-            batch.forEach { it.ack.completeExceptionally(e) }
+            respondWithFailure(batch)
+        }
+    }
+
+    private fun respondWithFailure(batch: List<BufferedMessage>) {
+        respond(batch, "Hetzner firewall update failed")
+    }
+
+    private fun respond(batch: List<BufferedMessage>, error: String? = null) {
+        batch.forEach { message ->
+            responseEmitter.send(message.payload.copy(error = error)).whenComplete { _, responseError ->
+                if (responseError == null) {
+                    message.ack.complete(Unit)
+                } else {
+                    message.ack.completeExceptionally(responseError)
+                }
+            }
         }
     }
 

@@ -12,10 +12,12 @@ import jakarta.enterprise.inject.Produces
 import jakarta.inject.Inject
 import kotlinx.coroutines.runBlocking
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.eclipse.microprofile.rest.client.inject.RestClient
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
+import java.io.IOException
 import java.util.*
 import java.util.concurrent.CompletableFuture
 
@@ -51,7 +53,7 @@ internal class HetznerFirewallServiceTest {
 
     @BeforeEach
     fun setup() {
-        hetznerApi.resetCallCount()
+        hetznerApi.reset()
         firewallWhitelistRepository.deleteAll()
     }
 
@@ -79,6 +81,15 @@ internal class HetznerFirewallServiceTest {
         service.whitelistIpForSession("game/200", userId = 123, ipAddress = "1.2.3.4")
 
         assertThat(firewallWhitelistRepository.getAllActive()).hasSize(1)
+    }
+
+    @Test
+    fun `Sync failure is returned to requester`() {
+        hetznerApi.failRequests = true
+
+        assertThatThrownBy {
+            service.whitelistIpForSession("game/200", userId = 123, ipAddress = "1.2.3.4")
+        }.hasRootCauseInstanceOf(IOException::class.java)
     }
 
     @Test
