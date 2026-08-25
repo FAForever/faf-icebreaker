@@ -245,7 +245,13 @@ internal class HetznerFirewallUpdater(
 
     private fun respond(batch: List<BufferedMessage>, error: String? = null) {
         batch.forEach { message ->
-            responseEmitter.send(message.payload.copy(error = error)).whenComplete { _, responseError ->
+            val response = try {
+                responseEmitter.send(message.payload.copy(error = error))
+            } catch (e: IllegalStateException) {
+                message.ack.completeExceptionally(e)
+                return@forEach
+            }
+            response.whenComplete { _, responseError ->
                 if (responseError == null) {
                     message.ack.complete(Unit)
                 } else {
