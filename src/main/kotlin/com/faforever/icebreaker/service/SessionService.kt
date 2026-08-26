@@ -20,6 +20,7 @@ import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import io.smallrye.mutiny.helpers.MultiEmitterProcessor
 import io.smallrye.mutiny.infrastructure.Infrastructure
+import io.smallrye.reactive.messaging.annotations.Blocking
 import io.vertx.core.json.JsonObject
 import jakarta.enterprise.inject.Instance
 import jakarta.inject.Singleton
@@ -29,6 +30,7 @@ import org.eclipse.microprofile.reactive.messaging.Emitter
 import org.eclipse.microprofile.reactive.messaging.Incoming
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import java.io.IOException
 import java.time.Clock
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -155,18 +157,48 @@ class SessionService(
             .findByCreatedAtLesserThan(
                 instant = cleanupTime,
             ).forEach { iceSession ->
-                LOG.debug("Cleaning up session id ${iceSession.id}")
-                activeSessionHandlers.forEach { handler ->
-                    try {
-                        handler.deleteSession(iceSession.id)
-                    } catch (e: Exception) {
-                        LOG.warn("Session handler {} failed to delete session {}; continuing cleanup", handler::class.simpleName, iceSession.id, e)
+                try {
+                    if (closeSession(iceSession)) {
+                        purgeSession(iceSession)
+                    } else {
+                        LOG.warn("Session {} could not be closed; retaining it for the next cleanup attempt", iceSession.id)
                     }
+                } catch (e: Exception) {
+                    LOG.warn("Failed to purge session {}; retaining it for the next cleanup attempt", iceSession.id, e)
                 }
-
-                gameUserStatsRepository.deleteByGameId(iceSession.gameId)
-                iceSessionRepository.delete(iceSession)
             }
+    }
+
+    @Incoming("game-result-in")
+    @Blocking
+    fun onGameResult(message: ByteArray) {
+        // The lobby server publishes JSON without a content type, so the RabbitMQ connector
+        // exposes the payload as raw bytes rather than a JsonObject.
+        val gameIdNode =
+            try {
+                objectMapper.readTree(message)?.get("game_id")
+            } catch (e: IOException) {
+                LOG.warn("Ignoring malformed game result message: {}", e.message)
+                return
+            }
+
+        if (gameIdNode == null || !gameIdNode.isIntegralNumber || !gameIdNode.canConvertToLong()) {
+            LOG.warn("Ignoring game result message without a valid game_id")
+            return
+        }
+
+        val gameId = gameIdNode.longValue()
+        val iceSession = iceSessionRepository.findByGameId(gameId)
+        if (iceSession == null) {
+            LOG.debug("No ICE session found for ended game {}", gameId)
+            return
+        }
+
+        // Pioneer may flush buffered logs after the result event. Close external
+        // resources now, but retain its local authorization state until scheduled cleanup.
+        if (!closeSession(iceSession)) {
+            LOG.warn("Session {} could not be closed after game {}; retaining it for scheduled cleanup", iceSession.id, gameId)
+        }
     }
 
     fun listenForEventMessages(gameId: Long): Multi<EventMessage> {
@@ -263,6 +295,27 @@ class SessionService(
         gameUserStatsRepository.incrementLogBytesPushed(gameId, currentUserId, estimatedLogsSize)
 
         lokiService.forwardLogs(gameId = gameId, userId = currentUserId, logs = logs)
+    }
+
+    private fun closeSession(iceSession: IceSessionEntity): Boolean {
+        LOG.debug("Closing session id {}", iceSession.id)
+        var succeeded = true
+        activeSessionHandlers.forEach { handler ->
+            try {
+                handler.deleteSession(iceSession.id)
+            } catch (e: Exception) {
+                succeeded = false
+                LOG.warn("Session handler {} failed to delete session {}; retaining cleanup state", handler::class.simpleName, iceSession.id, e)
+            }
+        }
+
+        return succeeded
+    }
+
+    private fun purgeSession(iceSession: IceSessionEntity) {
+        gameUserStatsRepository.deleteByGameId(iceSession.gameId)
+        // Cleanup can overlap across replicas, so make deletion idempotent.
+        iceSessionRepository.delete("id = ?1", iceSession.id)
     }
 
     private fun buildSessionId(gameId: Long) = "game/$gameId"
