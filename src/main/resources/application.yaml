@@ -100,6 +100,14 @@ mp:
           exclusive: true
         exchange:
           name: ice
+      game-result-in:
+        connector: smallrye-rabbitmq
+        virtual-host: ${RABBITMQ_VHOST:/faf-core}
+        queue:
+          name: icebreaker-game-result-queue
+        exchange:
+          name: faf-lobby
+        routing-keys: success.gameResults.create
       hetzner-request-in:
         connector: smallrye-rabbitmq
         virtual-host: ${RABBITMQ_VHOST:/faf-core}

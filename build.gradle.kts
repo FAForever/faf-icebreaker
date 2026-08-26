@@ -51,6 +51,7 @@ dependencies {
     testImplementation("io.quarkus:quarkus-test-security")
     testImplementation("io.quarkus:quarkus-test-security-jwt")
     testImplementation("io.quarkus:quarkus-junit5-mockito")
+    testImplementation("com.rabbitmq:amqp-client")
 }
 
 group = "com.faforever.icebreaker"
