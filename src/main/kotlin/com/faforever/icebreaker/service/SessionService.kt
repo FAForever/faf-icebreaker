@@ -11,6 +11,7 @@ import com.faforever.icebreaker.service.loki.LokiService
 import com.faforever.icebreaker.util.AsyncRunner
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.convertValue
+import com.fasterxml.jackson.module.kotlin.readValue
 import io.micrometer.core.instrument.MeterRegistry
 import io.quarkus.scheduler.Scheduled
 import io.quarkus.security.ForbiddenException
@@ -174,20 +175,16 @@ class SessionService(
     fun onGameResult(message: ByteArray) {
         // The lobby server publishes JSON without a content type, so the RabbitMQ connector
         // exposes the payload as raw bytes rather than a JsonObject.
-        val gameIdNode =
+        val gameResult =
             try {
-                objectMapper.readTree(message)?.get("game_id")
+                objectMapper.readValue<GameResultMessage>(message)
             } catch (e: IOException) {
                 LOG.warn("Ignoring malformed game result message: {}", e.message)
                 return
             }
 
-        if (gameIdNode == null || !gameIdNode.isIntegralNumber || !gameIdNode.canConvertToLong()) {
-            LOG.warn("Ignoring game result message without a valid game_id")
-            return
-        }
+        val gameId = gameResult.gameId
 
-        val gameId = gameIdNode.longValue()
         val iceSession = iceSessionRepository.findByGameId(gameId)
         if (iceSession == null) {
             LOG.debug("No ICE session found for ended game {}", gameId)
