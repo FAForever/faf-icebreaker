@@ -329,6 +329,8 @@ class SessionServiceTest {
         assertThatCode {
             service.onGameResult("not json".encodeToByteArray())
             service.onGameResult("""{"rating_type":"global"}""".encodeToByteArray())
+            service.onGameResult("""{"game_id":304.5}""".encodeToByteArray())
+            service.onGameResult("""{"game_id":"304"}""".encodeToByteArray())
         }.doesNotThrowAnyException()
 
         assertThat(iceSessionRepository.existsByGameId(304)).isTrue()
