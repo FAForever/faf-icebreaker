@@ -70,6 +70,33 @@ class FirewallWhitelistPanacheRepositoryTest {
     }
 
     @Test
+    fun `persistOrGet allows one address per family for the same session and user`() {
+        val ipv4 = repository.persistOrGet(
+            FirewallWhitelistEntity(
+                userId = 123L,
+                sessionId = "game/200",
+                allowedIp = "192.0.2.1",
+                createdAt = clock.instant(),
+                deletedAt = null,
+            ),
+        )
+
+        val ipv6 = repository.persistOrGet(
+            FirewallWhitelistEntity(
+                userId = 123L,
+                sessionId = "game/200",
+                allowedIp = "2001:db8::1",
+                createdAt = clock.instant(),
+                deletedAt = null,
+            ),
+        )
+
+        assertThat(ipv6.id).isNotEqualTo(ipv4.id)
+        assertThat(repository.getAllActive().map { it.allowedIp })
+            .containsExactlyInAnyOrder("192.0.2.1", "2001:db8::1")
+    }
+
+    @Test
     fun `persistOrGet allows different users in same session`() {
         val otherUser = repository.persistOrGet(
             FirewallWhitelistEntity(

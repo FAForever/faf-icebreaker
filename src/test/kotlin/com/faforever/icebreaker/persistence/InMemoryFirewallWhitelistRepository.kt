@@ -19,6 +19,7 @@ class InMemoryFirewallWhitelistRepository(
             userId = entity.userId,
             sessionId = entity.sessionId,
             allowedIp = entity.allowedIp,
+            addressFamily = entity.addressFamily,
             createdAt = clock.instant(),
             deletedAt = null,
         )
@@ -29,7 +30,10 @@ class InMemoryFirewallWhitelistRepository(
     @Synchronized
     override fun persistOrGet(entity: FirewallWhitelistEntity): FirewallWhitelistEntity {
         val existing = allowedIps.find {
-            it.sessionId == entity.sessionId && it.userId == entity.userId && it.deletedAt == null
+            it.sessionId == entity.sessionId &&
+                it.userId == entity.userId &&
+                it.addressFamily == entity.addressFamily &&
+                it.deletedAt == null
         }
         if (existing != null) {
             return existing

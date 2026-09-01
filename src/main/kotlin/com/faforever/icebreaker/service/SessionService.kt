@@ -95,11 +95,7 @@ class SessionService(
      * Creates a new session for [gameId]
      */
     fun getSession(gameId: Long): Session {
-        // For compatibility reasons right now we only check on mismatch because general FAF JWT are still allowed
-        // but have no implicit gameId attached
-        securityIdentity.attributes["gameId"]?.takeIf { it != gameId }?.run {
-            throw ForbiddenException("Not authorized to join game $gameId")
-        }
+        requireGameAccess(gameId)
 
         val sessionId = buildSessionId(gameId)
 
@@ -124,6 +120,20 @@ class SessionService(
             forceRelay = fafProperties.forceRelay(),
             servers = servers,
         )
+    }
+
+    /** Registers this request's observed client address for [gameId]. */
+    fun registerClientAddress(gameId: Long) {
+        requireGameAccess(gameId)
+
+        val sessionId = buildSessionId(gameId)
+        val currentUserId = currentUserService.requireCurrentUserId()
+        val currentUserIp = currentUserService.getCurrentUserIp()
+
+        persistSessionDetailsIfNecessary(gameId, sessionId)
+        activeSessionHandlers.forEach { handler ->
+            handler.registerClientAddress(sessionId, currentUserId, currentUserIp)
+        }
     }
 
     @Transactional
@@ -313,6 +323,14 @@ class SessionService(
         gameUserStatsRepository.deleteByGameId(iceSession.gameId)
         // Cleanup can overlap across replicas, so make deletion idempotent.
         iceSessionRepository.delete("id = ?1", iceSession.id)
+    }
+
+    private fun requireGameAccess(gameId: Long) {
+        // For compatibility reasons right now we only check on mismatch because general FAF JWT are still allowed
+        // but have no implicit gameId attached
+        securityIdentity.attributes["gameId"]?.takeIf { it != gameId }?.run {
+            throw ForbiddenException("Not authorized to join game $gameId")
+        }
     }
 
     private fun buildSessionId(gameId: Long) = "game/$gameId"

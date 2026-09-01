@@ -146,7 +146,7 @@ class SessionServiceTest {
         ],
     )
     @Test
-    fun `Whitelist expires after client closes WebRTC session`() {
+    fun `Client close removes every address family from the WebRTC session`() {
         service.getSession(201L)
 
         runBlocking {
@@ -154,10 +154,35 @@ class SessionServiceTest {
                 iceSessionRepository.existsByGameId(201)
             }
         }
+
+        Mockito.`when`(httpServerRequest.getHeader(fafProperties.realIpHeader()))
+            .thenReturn("2001:db8::1")
+        service.registerClientAddress(201L)
+
+        assertThat(firewallWhitelistRepository.getForSessionId("game/201").map { it.allowedIp })
+            .containsExactlyInAnyOrder(testIp, "2001:db8::1")
+
         service.onMessageReceived(201, PeerClosingMessage(gameId = 201, senderId = 123))
 
         val allowedIps = firewallWhitelistRepository.getForSessionId("game/201")
         assertThat(allowedIps).isEmpty()
+    }
+
+    @TestSecurity(user = "testUser", roles = ["viewer"])
+    @JwtSecurity(
+        claims = [
+            Claim(key = "sub", value = "123"),
+            Claim(key = "scp", value = """["lobby"]""", type = ClaimType.JSON_ARRAY),
+            Claim(key = "ext", value = """{"roles":["USER"],"gameId":203}"""),
+        ],
+    )
+    @Test
+    fun `registerClientAddress persists session lifecycle state`() {
+        service.registerClientAddress(203L)
+
+        assertThat(iceSessionRepository.existsByGameId(203L)).isTrue()
+        assertThat(firewallWhitelistRepository.getForSessionId("game/203").map { it.allowedIp })
+            .containsExactly(testIp)
     }
 
     @TestSecurity(user = "testUser", roles = ["viewer"])

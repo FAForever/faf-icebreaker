@@ -5,6 +5,8 @@ import io.quarkus.hibernate.orm.panache.kotlin.PanacheRepository
 import jakarta.inject.Singleton
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
+import jakarta.persistence.EnumType
+import jakarta.persistence.Enumerated
 import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
@@ -12,6 +14,16 @@ import jakarta.persistence.Table
 import jakarta.transaction.Transactional
 import java.time.Clock
 import java.time.Instant
+
+enum class FirewallAddressFamily {
+    IPV4,
+    IPV6,
+    ;
+
+    companion object {
+        fun fromAddress(address: String): FirewallAddressFamily = if (':' in address) IPV6 else IPV4
+    }
+}
 
 @Entity
 @Table(name = "firewall_whitelist")
@@ -23,13 +35,17 @@ data class FirewallWhitelistEntity(
     val sessionId: String,
     @Column(length = 45)
     val allowedIp: String,
+    @Enumerated(EnumType.STRING)
+    @Column(length = 4, updatable = false)
+    val addressFamily: FirewallAddressFamily = FirewallAddressFamily.fromAddress(allowedIp),
     @Column(updatable = false)
     val createdAt: Instant,
     var deletedAt: Instant?,
 ) : PanacheEntityBase
 
 interface FirewallWhitelistRepository {
-    // Inserts `entity` if no whitelist already exists for this (session, user); otherwise returns the existing entity.
+    // Inserts `entity` if no whitelist already exists for this (session, user, address family);
+    // otherwise returns the existing entity.
     fun persistOrGet(entity: FirewallWhitelistEntity): FirewallWhitelistEntity
     fun getForSessionId(sessionId: String): List<FirewallWhitelistEntity>
     fun getAllActive(): List<FirewallWhitelistEntity>
@@ -47,9 +63,10 @@ class FirewallWhitelistPanacheRepository(
 
     override fun persistOrGet(entity: FirewallWhitelistEntity): FirewallWhitelistEntity {
         val existing = find(
-            "sessionId = ?1 and userId = ?2 and deletedAt is null",
+            "sessionId = ?1 and userId = ?2 and addressFamily = ?3 and deletedAt is null",
             entity.sessionId,
             entity.userId,
+            entity.addressFamily,
         ).firstResult()
 
         return when {
