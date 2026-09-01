@@ -29,6 +29,7 @@ class HetznerFirewallServiceTestConfig {
     fun hetznerProperties(): HetznerProperties = object : HetznerProperties {
         override fun firewallId() = Optional.of("fwid")
         override fun maxIpsPerRule() = 3
+        override fun maxEffectiveRules() = 500
         override fun apiKey() = "abc-123"
     }
 }
@@ -73,6 +74,15 @@ internal class HetznerFirewallServiceTest {
 
         val allowedIps = hetznerApi.getRulesByFirewallId("fwid")!!.allSourceIps()
         assertThat(allowedIps).isEqualTo(setOf("1.2.3.4/32"))
+    }
+
+    @Test
+    fun `Add whitelist merges adjacent IPs into an exact CIDR block`() {
+        service.whitelistIpForSession("game/200", userId = 123, ipAddress = "192.0.2.0")
+        service.whitelistIpForSession("game/200", userId = 234, ipAddress = "192.0.2.1")
+
+        val allowedIps = hetznerApi.getRulesByFirewallId("fwid")!!.allSourceIps()
+        assertThat(allowedIps).containsExactly("192.0.2.0/31")
     }
 
     @Test

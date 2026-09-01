@@ -83,6 +83,7 @@ loki:
 hetzner:
   firewall-id: ${HETZNER_FIREWALL_ID}
   max-ips-per-rule: 100
+  max-effective-rules: 500
   api-key: ${HETZNER_API_KEY}
 smallrye:
   jwt:

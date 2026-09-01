@@ -17,6 +17,13 @@ interface HetznerProperties {
      */
     fun maxIpsPerRule(): Int
 
+    /**
+     * The maximum number of unique source prefixes allowed across all inbound rules.
+     * Hetzner counts these as effective rules even when several prefixes share one API rule.
+     * See https://docs.hetzner.com/cloud/firewalls/faq/#what-is-an-effective-rule
+     */
+    fun maxEffectiveRules(): Int
+
     /** The API key that should be used as a bearer authorisation token when calling Hetzner APIs.*/
     fun apiKey(): String
 }
