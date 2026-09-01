@@ -5,6 +5,10 @@ import com.faforever.icebreaker.persistence.FirewallWhitelistRepository
 import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.FirewallRule
 import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.FirewallRule.Direction
 import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.FirewallRule.Protocol
+import inet.ipaddr.AddressStringParameters.RangeParameters
+import inet.ipaddr.IPAddress
+import inet.ipaddr.IPAddressString
+import inet.ipaddr.IPAddressStringParameters
 import io.quarkus.scheduler.Scheduled
 import io.vertx.core.json.JsonObject
 import jakarta.enterprise.context.ApplicationScoped
@@ -17,9 +21,6 @@ import org.eclipse.microprofile.rest.client.inject.RestClient
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.io.IOException
-import java.net.Inet4Address
-import java.net.Inet6Address
-import java.net.InetAddress
 import java.time.Clock
 import java.util.*
 import java.util.concurrent.CompletableFuture
@@ -31,23 +32,35 @@ import kotlin.jvm.optionals.getOrNull
 
 private val LOG: Logger = LoggerFactory.getLogger(HetznerFirewallService::class.java)
 
-/**
- * Converts an IP address string to CIDR notation.
- *
- * Returns null if the IP address cannot be parsed or is of unknown type.
- */
-private fun String.toCidr(): String? = try {
-    val inetAddress = InetAddress.getByName(this)
-    when (inetAddress) {
-        is Inet4Address -> "$this/32"
-        is Inet6Address -> "$this/128"
-        else -> {
-            LOG.warn("Unknown IP address type for {}", this)
-            null
-        }
+private val IP_ADDRESS_VALIDATION_OPTIONS = IPAddressStringParameters.Builder()
+    .allowEmpty(false)
+    .allowAll(false)
+    .allowSingleSegment(false)
+    .allowPrefix(false)
+    .allowMask(false)
+    .allowPrefixOnly(false)
+    .allowWildcardedSeparator(false)
+    .setRangeOptions(RangeParameters.NO_RANGE)
+    .allow_inet_aton(false)
+    .also { builder ->
+        builder.getIPv4AddressParametersBuilder().allowBinary(false)
+        builder.getIPv6AddressParametersBuilder()
+            .allowBase85(false)
+            .allowBinary(false)
+            .allowZone(false)
+            .allow_mixed_inet_aton(false)
     }
-} catch (e: Exception) {
-    LOG.warn("Failed to parse IP address {}: {}", this, e.message)
+    .toParams()
+
+/**
+ * Parses an individual IP address without resolving host names.
+ *
+ * Returns null if the value is not an individual IPv4 or IPv6 address.
+ */
+private fun String.toIpAddress(): IPAddress? = try {
+    IPAddressString(this, IP_ADDRESS_VALIDATION_OPTIONS).toAddress()
+        ?.takeUnless { address -> address.isMultiple || address.prefixLength != null }
+} catch (_: Exception) {
     null
 }
 
@@ -189,11 +202,13 @@ internal class HetznerFirewallUpdater(
             // themselves - they are personal data (GDPR) and must not land in our logs.
             // Remove once resolved.
             val ruleSizes = request.rules.map { it.sourceIps.size }
+            val effectiveSourcePrefixes = request.rules.flatMap { it.sourceIps }.toSet().size
             LOG.info(
-                "Hetzner set_rules structure for firewall {}: ruleCount={}, totalSourceIpEntries={}, " +
-                    "sizeDistribution={}, perRule={}",
+                "Hetzner set_rules structure for firewall {}: ruleCount={}, effectiveSourcePrefixes={}, " +
+                    "totalSourceIpEntries={}, sizeDistribution={}, perRule={}",
                 firewall,
                 request.rules.size,
+                effectiveSourcePrefixes,
                 ruleSizes.sum(),
                 ruleSizes.groupingBy { it }.eachCount(),
                 request.rules.map { "${it.direction}/${it.protocol}=${it.sourceIps.size}" },
@@ -261,9 +276,17 @@ internal class HetznerFirewallUpdater(
         }
     }
 
-    private fun buildSetFirewallRequest(): SetFirewallRulesRequest {
-        val sourceIps = repository.getAllActive().mapNotNull { entry -> entry.allowedIp.trim().toCidr() }.distinct()
-        val sourceBlocks: List<List<String>> = sourceIps.chunked(hetznerProperties.maxIpsPerRule())
+    internal fun buildSetFirewallRequest(): SetFirewallRulesRequest {
+        val activeWhitelists = repository.getAllActive()
+        val sourceAddresses = activeWhitelists.mapNotNull { entry -> entry.allowedIp.trim().toIpAddress() }
+        val malformedAddressCount = activeWhitelists.size - sourceAddresses.size
+        if (malformedAddressCount > 0) {
+            LOG.warn("Ignoring {} malformed addresses in the active firewall whitelist", malformedAddressCount)
+        }
+        val aggregation = IpRangeAggregator.aggregate(sourceAddresses, hetznerProperties.maxEffectiveRules())
+        val sourceBlocks = aggregation.prefixesByFamily.values.flatMap { prefixes ->
+            prefixes.chunked(hetznerProperties.maxIpsPerRule())
+        }
         val rules = sourceBlocks.flatMap { sources ->
             listOf(
                 // We don't specify the ports for either rule, because the port might
@@ -281,7 +304,15 @@ internal class HetznerFirewallUpdater(
             )
         }
         val request = SetFirewallRulesRequest(rules)
-        LOG.debug("Hetzner request summary: rules={}, totalSourceIps={}", rules.size, sourceIps.size)
+        LOG.info(
+            "Aggregated {} unique client IPs into {} Hetzner firewall prefixes, admitting {} additional addresses " +
+                "in total and at most {} in one prefix",
+            aggregation.addressCount,
+            aggregation.prefixes.size,
+            aggregation.additionalAddressCount,
+            aggregation.largestPrefixAdditionalAddressCount,
+        )
+        LOG.debug("Hetzner request summary: rules={}, effectiveSourcePrefixes={}", rules.size, aggregation.prefixes.size)
         return request
     }
 }
