@@ -6,6 +6,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.Clock
+import java.time.Instant
 
 @QuarkusTest
 class FirewallWhitelistPanacheRepositoryTest {
@@ -44,13 +45,13 @@ class FirewallWhitelistPanacheRepositoryTest {
     }
 
     @Test
-    fun `persistOrGet returns existing entry when duplicate session and user`() {
+    fun `persistOrGet updates the active address for the same session user and family`() {
         val firstEntity = repository.persistOrGet(
             FirewallWhitelistEntity(
                 userId = 123L,
                 sessionId = "game/200",
                 allowedIp = "1.2.3.4",
-                createdAt = clock.instant(),
+                createdAt = Instant.parse("2026-09-01T00:00:00Z"),
                 deletedAt = null,
             ),
         )
@@ -60,13 +61,47 @@ class FirewallWhitelistPanacheRepositoryTest {
                 userId = 123L,
                 sessionId = "game/200",
                 allowedIp = "1.2.3.5", // Different IP, same user/session
-                createdAt = clock.instant(),
+                createdAt = firstEntity.createdAt.plusSeconds(60),
                 deletedAt = null,
             ),
         )
 
         assertThat(secondEntity.id).isEqualTo(firstEntity.id)
-        assertThat(repository.getAllActive()).hasSize(1)
+        assertThat(secondEntity.createdAt).isEqualTo(firstEntity.createdAt)
+        assertThat(repository.getAllActive().map { it.allowedIp }).containsExactly("1.2.3.5")
+        assertThat(repository.persistOrGet(secondEntity).id).isEqualTo(firstEntity.id)
+    }
+
+    @Test
+    fun `persistOrGet allows one address per family for the same session and user`() {
+        val ipv4 = repository.persistOrGet(
+            FirewallWhitelistEntity(
+                userId = 123L,
+                sessionId = "game/200",
+                allowedIp = "192.0.2.1",
+                createdAt = clock.instant(),
+                deletedAt = null,
+            ),
+        )
+
+        val ipv6 = repository.persistOrGet(
+            FirewallWhitelistEntity(
+                userId = 123L,
+                sessionId = "game/200",
+                allowedIp = "2001:db8::1",
+                createdAt = clock.instant(),
+                deletedAt = null,
+            ),
+        )
+
+        assertThat(ipv6.id).isNotEqualTo(ipv4.id)
+        assertThat(repository.getAllActive().map { it.allowedIp })
+            .containsExactlyInAnyOrder("192.0.2.1", "2001:db8::1")
+
+        repository.persistOrGet(ipv6.copy(id = 0, allowedIp = "2001:db8::2"))
+        repository.persistOrGet(ipv6.copy(id = 0, allowedIp = "2001:db8::3"))
+        assertThat(repository.getAllActive().map { it.allowedIp })
+            .containsExactlyInAnyOrder("192.0.2.1", "2001:db8::3")
     }
 
     @Test

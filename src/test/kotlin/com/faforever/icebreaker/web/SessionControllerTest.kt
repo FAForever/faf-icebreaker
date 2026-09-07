@@ -89,8 +89,9 @@ class SessionControllerTest {
     }
 
     @AfterEach
-    fun resetHetznerStub() {
+    fun resetState() {
         hetznerApi.reset()
+        firewallWhitelistRepository.deleteAll()
     }
 
     @Test
@@ -99,6 +100,56 @@ class SessionControllerTest {
             .`when`().get("/session/game/$gameId")
             .then()
             .statusCode(401)
+    }
+
+    @Test
+    fun `Unauthenticated POST session-game-(game)-addresses returns 401 response`() {
+        given()
+            .`when`().post("/session/game/$gameId/addresses")
+            .then()
+            .statusCode(401)
+    }
+
+    @Test
+    fun `POST session-game-(game)-addresses rejects token for another game`() {
+        given()
+            .header("Authorization", "Bearer $testJwt")
+            .header("X-Real-Ip", "192.0.2.1")
+            .`when`().post("/session/game/${gameId + 1}/addresses")
+            .then()
+            .statusCode(403)
+
+        assertThat(firewallWhitelistRepository.getForSessionId("game/${gameId + 1}"))
+            .isEmpty()
+    }
+
+    @Test
+    fun `POST session-game-(game)-addresses syncs the latest observed address per family`() {
+        listOf("192.0.2.1", "2001:db8::1", "198.51.100.1", "2001:db8::2", "198.51.100.1").forEach { address ->
+            given()
+                .header("Authorization", "Bearer $testJwt")
+                .header("X-Real-Ip", address)
+                .`when`().post("/session/game/$gameId/addresses")
+                .then()
+                .statusCode(204)
+        }
+
+        assertThat(firewallWhitelistRepository.getForSessionId("game/$gameId").map { it.allowedIp })
+            .containsExactlyInAnyOrder("198.51.100.1", "2001:db8::2")
+        assertThat(hetznerApi.getRulesByFirewallId("fwid")!!.flatMap { it.sourceIps }.toSet())
+            .containsExactlyInAnyOrder("198.51.100.1/32", "2001:db8::2/128")
+    }
+
+    @Test
+    fun `POST session-game-(game)-addresses reports firewall sync failure`() {
+        hetznerApi.failRequests = true
+
+        given()
+            .header("Authorization", "Bearer $testJwt")
+            .header("X-Real-Ip", "192.0.2.1")
+            .`when`().post("/session/game/$gameId/addresses")
+            .then()
+            .statusCode(500)
     }
 
     @Test

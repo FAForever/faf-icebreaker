@@ -37,7 +37,7 @@ class TurnSessionHandler(
     override fun createSession(id: String, userId: Long, clientIp: String): List<Session.Server> {
         val firewallSynced =
             try {
-                hetznerFirewallService.whitelistIpForSession(id, userId, clientIp)
+                registerClientAddress(id, userId, clientIp)
                 true
             } catch (e: Exception) {
                 LOG.warn("Failed to sync Hetzner firewall for session {}; omitting firewalled TURN servers", id, e)
@@ -59,6 +59,9 @@ class TurnSessionHandler(
                 )
             }
     }
+
+    override fun registerClientAddress(id: String, userId: Long, clientIp: String) =
+        hetznerFirewallService.whitelistIpForSession(id, userId, clientIp)
 
     override fun deleteSession(id: String) = hetznerFirewallService.removeWhitelistsForSession(id)
 

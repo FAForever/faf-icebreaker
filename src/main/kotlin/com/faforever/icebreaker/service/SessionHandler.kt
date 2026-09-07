@@ -11,6 +11,9 @@ interface SessionHandler {
      */
     fun createSession(id: String, userId: Long, clientIp: String): List<Session.Server>
 
+    /** Registers a server-observed address for [userId] in session [id]. */
+    fun registerClientAddress(id: String, userId: Long, clientIp: String) {}
+
     // Remove an entire session
     fun deleteSession(id: String)
 

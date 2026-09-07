@@ -95,11 +95,7 @@ class SessionService(
      * Creates a new session for [gameId]
      */
     fun getSession(gameId: Long): Session {
-        // For compatibility reasons right now we only check on mismatch because general FAF JWT are still allowed
-        // but have no implicit gameId attached
-        securityIdentity.attributes["gameId"]?.takeIf { it != gameId }?.run {
-            throw ForbiddenException("Not authorized to join game $gameId")
-        }
+        requireGameAccess(gameId)
 
         val sessionId = buildSessionId(gameId)
 
@@ -116,7 +112,11 @@ class SessionService(
             }
 
         AsyncRunner.runLater {
-            persistSessionDetailsIfNecessary(gameId, sessionId)
+            try {
+                persistSessionDetailsIfNecessary(gameId, sessionId)
+            } catch (e: Exception) {
+                LOG.warn("Unable to persist session details for game id $gameId and session id $sessionId", e)
+            }
         }
 
         return Session(
@@ -126,24 +126,45 @@ class SessionService(
         )
     }
 
+    /** Registers this request's observed client address for [gameId]. */
+    fun registerClientAddress(gameId: Long) {
+        requireGameAccess(gameId)
+
+        val sessionId = buildSessionId(gameId)
+        val currentUserId = currentUserService.requireCurrentUserId()
+        val currentUserIp = currentUserService.getCurrentUserIp()
+
+        persistSessionDetailsIfNecessary(gameId, sessionId)
+        val failures = mutableListOf<Exception>()
+        activeSessionHandlers.forEach { handler ->
+            try {
+                handler.registerClientAddress(sessionId, currentUserId, currentUserIp)
+            } catch (e: Exception) {
+                LOG.warn("Session handler {} failed to register client address for {}", handler::class.simpleName, sessionId, e)
+                failures.add(e)
+            }
+        }
+        if (failures.isNotEmpty()) {
+            throw IOException("Failed to register client address with session handlers", failures.first()).apply {
+                failures.drop(1).forEach { addSuppressed(it) }
+            }
+        }
+    }
+
     @Transactional
     fun persistSessionDetailsIfNecessary(
         gameId: Long,
         sessionId: String,
     ) {
         if (!iceSessionRepository.existsByGameId(gameId)) {
-            try {
-                LOG.debug("Creating session for gameId $gameId")
-                iceSessionRepository.persist(
-                    IceSessionEntity(
-                        id = sessionId,
-                        gameId = gameId,
-                        createdAt = clock.instant(),
-                    ),
-                )
-            } catch (e: Exception) {
-                LOG.warn("Unable to persist session details for game id $gameId and session id $sessionId", e)
-            }
+            LOG.debug("Creating session for gameId $gameId")
+            iceSessionRepository.persist(
+                IceSessionEntity(
+                    id = sessionId,
+                    gameId = gameId,
+                    createdAt = clock.instant(),
+                ),
+            )
         }
     }
 
@@ -313,6 +334,14 @@ class SessionService(
         gameUserStatsRepository.deleteByGameId(iceSession.gameId)
         // Cleanup can overlap across replicas, so make deletion idempotent.
         iceSessionRepository.delete("id = ?1", iceSession.id)
+    }
+
+    private fun requireGameAccess(gameId: Long) {
+        // For compatibility reasons right now we only check on mismatch because general FAF JWT are still allowed
+        // but have no implicit gameId attached
+        securityIdentity.attributes["gameId"]?.takeIf { it != gameId }?.run {
+            throw ForbiddenException("Not authorized to join game $gameId")
+        }
     }
 
     private fun buildSessionId(gameId: Long) = "game/$gameId"
