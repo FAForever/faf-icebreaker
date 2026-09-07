@@ -36,6 +36,7 @@ class InMemoryFirewallWhitelistRepository(
                 it.deletedAt == null
         }
         if (existing != null) {
+            existing.allowedIp = entity.allowedIp
             return existing
         }
         return persist(entity)

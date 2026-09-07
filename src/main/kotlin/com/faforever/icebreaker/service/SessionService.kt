@@ -112,7 +112,11 @@ class SessionService(
             }
 
         AsyncRunner.runLater {
-            persistSessionDetailsIfNecessary(gameId, sessionId)
+            try {
+                persistSessionDetailsIfNecessary(gameId, sessionId)
+            } catch (e: Exception) {
+                LOG.warn("Unable to persist session details for game id $gameId and session id $sessionId", e)
+            }
         }
 
         return Session(
@@ -131,8 +135,19 @@ class SessionService(
         val currentUserIp = currentUserService.getCurrentUserIp()
 
         persistSessionDetailsIfNecessary(gameId, sessionId)
+        val failures = mutableListOf<Exception>()
         activeSessionHandlers.forEach { handler ->
-            handler.registerClientAddress(sessionId, currentUserId, currentUserIp)
+            try {
+                handler.registerClientAddress(sessionId, currentUserId, currentUserIp)
+            } catch (e: Exception) {
+                LOG.warn("Session handler {} failed to register client address for {}", handler::class.simpleName, sessionId, e)
+                failures.add(e)
+            }
+        }
+        if (failures.isNotEmpty()) {
+            throw IOException("Failed to register client address with session handlers", failures.first()).apply {
+                failures.drop(1).forEach { addSuppressed(it) }
+            }
         }
     }
 
@@ -142,18 +157,14 @@ class SessionService(
         sessionId: String,
     ) {
         if (!iceSessionRepository.existsByGameId(gameId)) {
-            try {
-                LOG.debug("Creating session for gameId $gameId")
-                iceSessionRepository.persist(
-                    IceSessionEntity(
-                        id = sessionId,
-                        gameId = gameId,
-                        createdAt = clock.instant(),
-                    ),
-                )
-            } catch (e: Exception) {
-                LOG.warn("Unable to persist session details for game id $gameId and session id $sessionId", e)
-            }
+            LOG.debug("Creating session for gameId $gameId")
+            iceSessionRepository.persist(
+                IceSessionEntity(
+                    id = sessionId,
+                    gameId = gameId,
+                    createdAt = clock.instant(),
+                ),
+            )
         }
     }
 

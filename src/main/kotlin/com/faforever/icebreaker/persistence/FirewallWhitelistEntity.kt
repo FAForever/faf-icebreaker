@@ -34,7 +34,7 @@ data class FirewallWhitelistEntity(
     val userId: Long,
     val sessionId: String,
     @Column(length = 45)
-    val allowedIp: String,
+    var allowedIp: String,
     @Enumerated(EnumType.STRING)
     @Column(length = 4, updatable = false)
     val addressFamily: FirewallAddressFamily = FirewallAddressFamily.fromAddress(allowedIp),
@@ -44,8 +44,8 @@ data class FirewallWhitelistEntity(
 ) : PanacheEntityBase
 
 interface FirewallWhitelistRepository {
-    // Inserts `entity` if no whitelist already exists for this (session, user, address family);
-    // otherwise returns the existing entity.
+    // Inserts `entity` if no active whitelist exists for this (session, user, address family);
+    // otherwise updates its address, preserving its identity and creation time.
     fun persistOrGet(entity: FirewallWhitelistEntity): FirewallWhitelistEntity
     fun getForSessionId(sessionId: String): List<FirewallWhitelistEntity>
     fun getAllActive(): List<FirewallWhitelistEntity>
@@ -70,7 +70,7 @@ class FirewallWhitelistPanacheRepository(
         ).firstResult()
 
         return when {
-            existing != null -> existing
+            existing != null -> existing.apply { allowedIp = entity.allowedIp }
             else -> {
                 persist(entity)
                 entity

@@ -124,8 +124,8 @@ class SessionControllerTest {
     }
 
     @Test
-    fun `POST session-game-(game)-addresses registers one observed address per family`() {
-        listOf("192.0.2.1", "198.51.100.1", "2001:db8::1").forEach { address ->
+    fun `POST session-game-(game)-addresses syncs the latest observed address per family`() {
+        listOf("192.0.2.1", "2001:db8::1", "198.51.100.1", "2001:db8::2", "198.51.100.1").forEach { address ->
             given()
                 .header("Authorization", "Bearer $testJwt")
                 .header("X-Real-Ip", address)
@@ -135,7 +135,9 @@ class SessionControllerTest {
         }
 
         assertThat(firewallWhitelistRepository.getForSessionId("game/$gameId").map { it.allowedIp })
-            .containsExactlyInAnyOrder("192.0.2.1", "2001:db8::1")
+            .containsExactlyInAnyOrder("198.51.100.1", "2001:db8::2")
+        assertThat(hetznerApi.getRulesByFirewallId("fwid")!!.flatMap { it.sourceIps }.toSet())
+            .containsExactlyInAnyOrder("198.51.100.1/32", "2001:db8::2/128")
     }
 
     @Test
