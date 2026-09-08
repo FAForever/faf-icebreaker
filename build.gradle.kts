@@ -57,6 +57,24 @@ dependencies {
 group = "com.faforever.icebreaker"
 version = "1.0.0-SNAPSHOT"
 
+val benchmark = sourceSets.create("benchmark")
+configurations[benchmark.implementationConfigurationName].extendsFrom(configurations.implementation.get())
+configurations[benchmark.runtimeOnlyConfigurationName].extendsFrom(configurations.runtimeOnly.get())
+
+dependencies {
+    add(benchmark.implementationConfigurationName, sourceSets.main.get().output)
+    add(benchmark.implementationConfigurationName, "org.openjdk.jmh:jmh-core:1.37")
+    add(benchmark.annotationProcessorConfigurationName, "org.openjdk.jmh:jmh-generator-annprocess:1.37")
+}
+
+tasks.register<JavaExec>("benchmark") {
+    group = "verification"
+    description = "Runs the opt-in IP aggregation benchmarks (not part of build or test)."
+    classpath = benchmark.runtimeClasspath
+    mainClass.set("org.openjdk.jmh.Main")
+    args("IpRangeAggregatorBenchmark", "-prof", "gc")
+}
+
 java {
 }
 

@@ -68,6 +68,34 @@ You can then run the tests:
 
 If the tests fail, look in the gradle output for a link to an HTML file that will contain the test output for each test.
 
+## Benchmarking IP aggregation
+
+The opt-in JMH benchmark measures aggregation at the 500-prefix budget, with input
+construction outside the timed operation. It covers mixed families, sparse IPv4,
+an under-budget exact cover, and a dense block mixed with sparse addresses.
+It does not start the application or require MariaDB or RabbitMQ.
+
+```shell
+./gradlew benchmark
+```
+
+The default uses three JVM forks and reports time and allocated bytes per operation.
+Benchmarks are not run by `build` or `test`. To select a scenario and save results:
+
+```shell
+./gradlew benchmark --args='IpRangeAggregatorBenchmark -p scenario=mixed1500 -prof gc -rf json -rff build/aggregation.json'
+```
+
+For an initial-call measurement, use single-shot mode without warmup in fresh forks:
+
+```shell
+./gradlew benchmark --args='IpRangeAggregatorBenchmark -p scenario=mixed1500 -bm ss -wi 0 -i 1 -f 10'
+```
+
+Compare revisions with the same JDK, hardware, heap, inputs, and benchmark settings.
+The fixtures are synthetic, not production traffic. Results exclude database access,
+queueing, and the Hetzner request, so they do not establish end-to-end sync latency.
+
 ## Packaging and running the application
 
 The application can be packaged using:
