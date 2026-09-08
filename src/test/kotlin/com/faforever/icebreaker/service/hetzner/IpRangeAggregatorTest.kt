@@ -6,6 +6,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatIllegalArgumentException
 import org.junit.jupiter.api.Test
 import java.math.BigInteger
+import kotlin.random.Random
 
 internal class IpRangeAggregatorTest {
     @Test
@@ -178,6 +179,64 @@ internal class IpRangeAggregatorTest {
                     .describedAs("requiredMask=%s, maxPrefixes=%s", requiredMask, maxPrefixes)
                     .isEqualTo(BigInteger.valueOf(expectedAdditionalAddresses.toLong()))
                 assertThat(result.prefixes).hasSizeLessThanOrEqualTo(maxPrefixes)
+            }
+        }
+    }
+
+    @Test
+    fun `Exact cover is returned when it fits the budget`() {
+        val addresses = listOf(
+            "192.0.2.0",
+            "192.0.2.1",
+            "192.0.2.2",
+            "192.0.2.3",
+            "198.51.100.8",
+            "198.51.100.9",
+            "2001:db8::",
+            "2001:db8::1",
+        ).map(::ip)
+
+        val result = IpRangeAggregator.aggregate(addresses, maxPrefixes = 500)
+
+        assertThat(result.prefixes)
+            .containsExactly("192.0.2.0/30", "198.51.100.8/31", "2001:db8::/127")
+        assertThat(result.additionalAddressCount).isEqualTo(BigInteger.ZERO)
+        assertThat(result.largestPrefixAdditionalAddressCount).isEqualTo(BigInteger.ZERO)
+    }
+
+    @Test
+    fun `Random address sets stay covered by disjoint prefixes within the budget`() {
+        val random = Random(1)
+        repeat(50) { round ->
+            val addresses = List(random.nextInt(2, 200)) {
+                if (random.nextBoolean()) {
+                    ip("${random.nextInt(1, 224)}.${random.nextInt(256)}.${random.nextInt(256)}.${random.nextInt(256)}")
+                } else {
+                    ip((0 until 8).joinToString(":") { random.nextInt(0x10000).toString(16) })
+                }
+            }
+            val maxPrefixes = random.nextInt(2, 40)
+
+            val result = IpRangeAggregator.aggregate(addresses, maxPrefixes)
+            val prefixes = result.prefixes.map(::ip)
+            val uniqueAddresses = addresses.distinct()
+
+            assertThat(prefixes)
+                .describedAs("round=%s addresses=%s maxPrefixes=%s", round, addresses, maxPrefixes)
+                .hasSizeLessThanOrEqualTo(maxPrefixes)
+            assertThat(result.addressCount).isEqualTo(uniqueAddresses.size)
+            assertThat(uniqueAddresses).allMatch { address -> prefixes.any { prefix -> prefix.contains(address) } }
+            assertThat(prefixes.sumOf { prefix -> prefix.count } - result.addressCount.toBigInteger())
+                .isEqualTo(result.additionalAddressCount)
+            assertThat(
+                prefixes.maxOf { prefix ->
+                    prefix.count - uniqueAddresses.count { address -> prefix.contains(address) }.toBigInteger()
+                },
+            ).isEqualTo(result.largestPrefixAdditionalAddressCount)
+            for (index in prefixes.indices) {
+                assertThat(prefixes.withIndex())
+                    .filteredOn { candidate -> candidate.index != index }
+                    .noneMatch { candidate -> prefixes[index].contains(candidate.value) }
             }
         }
     }
