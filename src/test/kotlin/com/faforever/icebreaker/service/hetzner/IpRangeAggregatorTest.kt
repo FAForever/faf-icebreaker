@@ -133,6 +133,30 @@ internal class IpRangeAggregatorTest {
     }
 
     @Test
+    fun `Mixed family costs retain the carry when choosing a prefix budget`() {
+        val addresses = listOf(
+            "0.0.0.0",
+            "255.255.255.255",
+            "::",
+            "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
+        ).map(::ip)
+
+        val twoPrefixes = IpRangeAggregator.aggregate(addresses, maxPrefixes = 2)
+        val threePrefixes = IpRangeAggregator.aggregate(addresses, maxPrefixes = 3)
+
+        assertThat(twoPrefixes.additionalAddressCount)
+            .isEqualTo(BigInteger.ONE.shiftLeft(128) + BigInteger.ONE.shiftLeft(32) - BigInteger.valueOf(4))
+        // Without the carry, the two-prefix cost wraps below the three-prefix cost.
+        // The solver would then admit all IPv6 addresses instead of just these two hosts.
+        assertThat(threePrefixes.prefixes)
+            .containsExactly("0.0.0.0/0", "::/128", "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/128")
+        assertThat(threePrefixes.additionalAddressCount)
+            .isEqualTo(BigInteger.ONE.shiftLeft(32) - BigInteger.TWO)
+        assertThat(threePrefixes.largestPrefixAdditionalAddressCount)
+            .isEqualTo(threePrefixes.additionalAddressCount)
+    }
+
+    @Test
     fun `Result is optimal for every subset of a small address space`() {
         val candidateCoverMasks = listOf(
             0xff,
