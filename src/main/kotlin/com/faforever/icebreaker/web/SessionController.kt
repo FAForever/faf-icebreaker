@@ -67,6 +67,13 @@ class SessionController(
         }
 
     @POST
+    @Path("/game/{gameId}/addresses")
+    @PermissionsAllowed("USER:lobby")
+    fun registerClientAddress(@RestPath gameId: Long) {
+        sessionService.registerClientAddress(gameId)
+    }
+
+    @POST
     @Path("/game/{gameId}/events")
     @PermissionsAllowed("USER:lobby")
     @Consumes(MediaType.APPLICATION_JSON)
