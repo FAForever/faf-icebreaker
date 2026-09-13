@@ -95,6 +95,7 @@ class HetznerFirewallService(
 
     /** Whitelists [ipAddress] for session [sessionId]. */
     fun whitelistIpForSession(sessionId: String, userId: Long, ipAddress: String) {
+        require(ipAddress.toIpAddress() != null) { "Expected an individual IPv4 or IPv6 address" }
         LOG.debug("Whitelisting IP {} for session {} in Hetzner cloud firewall", ipAddress, sessionId)
         repository.persistOrGet(
             FirewallWhitelistEntity(

@@ -59,6 +59,20 @@ internal class HetznerFirewallServiceTest {
     }
 
     @Test
+    fun `Invalid whitelist addresses are rejected before persistence or synchronization`() {
+        val invalidAddresses = listOf("", "example.com", "192.0.2.0/24", "192.0.2.*", "127.1", "fe80::1%eth0")
+
+        invalidAddresses.forEach { address ->
+            assertThatThrownBy {
+                service.whitelistIpForSession("game/200", userId = 123, ipAddress = address)
+            }.isInstanceOf(IllegalArgumentException::class.java)
+        }
+
+        assertThat(firewallWhitelistRepository.getAllActive()).isEmpty()
+        assertThat(hetznerApi.getCallCount()).isZero()
+    }
+
+    @Test
     fun `Add whitelist`() {
         service.whitelistIpForSession("game/200", userId = 123, ipAddress = "1.2.3.4")
 
