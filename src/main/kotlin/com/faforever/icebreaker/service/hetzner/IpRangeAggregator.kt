@@ -1,6 +1,9 @@
 package com.faforever.icebreaker.service.hetzner
 
 import inet.ipaddr.IPAddress
+import inet.ipaddr.ipv4.IPv4Address
+import inet.ipaddr.ipv6.IPv6Address
+import java.lang.Long.compareUnsigned
 import java.math.BigInteger
 
 internal data class IpRangeAggregation(
@@ -27,231 +30,463 @@ internal enum class IpAddressFamily(val bitCount: Int) {
  * for the number of additional addresses admitted, rather than relying on a greedy
  * nearest-neighbour merge. Equal-cost results prefer the one whose broadest prefix
  * admits fewer additional addresses, then the result with fewer prefixes.
+ *
+ * The dynamic program runs on flat primitive tables. Because the chosen prefixes are
+ * disjoint, the additional addresses they admit never reach 2^128, so widening costs
+ * are tracked as unsigned 128-bit (high, low) word pairs instead of [BigInteger]s.
+ * The reported counts are recomputed from the selected prefixes, which are few.
+ * When the exact cover of the addresses already fits the budget, it is the optimum
+ * and is returned without running the dynamic program at all.
  */
 internal object IpRangeAggregator {
     fun aggregate(addresses: Collection<IPAddress>, maxPrefixes: Int): IpRangeAggregation {
         require(maxPrefixes > 0) { "maxPrefixes must be positive" }
 
-        val uniqueAddresses = addresses
-            .map { address ->
-                require(!address.isMultiple) { "Only individual IP addresses can be aggregated" }
-                val normalized = address.withoutPrefixLength()
-                AddressValue(
-                    family = if (normalized.isIPv4) IpAddressFamily.IPV4 else IpAddressFamily.IPV6,
-                    value = BigInteger(1, normalized.bytes),
-                    address = normalized,
-                )
-            }
-            .distinctBy { address -> address.family to address.value }
-            .sortedWith(compareBy<AddressValue> { it.family }.thenBy { it.value })
-
-        if (uniqueAddresses.isEmpty()) {
+        val roots = buildFamilyTries(addresses)
+        if (roots.isEmpty()) {
             return IpRangeAggregation(emptyMap(), 0, BigInteger.ZERO, BigInteger.ZERO)
         }
-
-        val roots = uniqueAddresses
-            .groupBy { it.family }
-            .toSortedMap()
-            .map { (family, addresses) -> FamilyRoot(family, buildTrie(addresses)) }
         require(maxPrefixes >= roots.size) {
             "maxPrefixes must allow at least one prefix per address family"
         }
-        val usableMaxPrefixes = minOf(maxPrefixes, uniqueAddresses.size)
 
-        var combined = arrayOfNulls<CombinedPlan>(usableMaxPrefixes + 1)
-        combined[0] = CombinedPlan(BigInteger.ZERO, BigInteger.ZERO, emptyList())
-
-        for (root in roots) {
-            val familyPlans = buildPlans(root.trie, usableMaxPrefixes)
-            val next = arrayOfNulls<CombinedPlan>(usableMaxPrefixes + 1)
-            for (existingCount in combined.indices) {
-                val existing = combined[existingCount] ?: continue
-                for (familyCount in 1 until familyPlans.size) {
-                    val familyPlan = familyPlans[familyCount] ?: continue
-                    val totalCount = existingCount + familyCount
-                    if (totalCount > usableMaxPrefixes) break
-
-                    val candidate = CombinedPlan(
-                        additionalAddressCount = existing.additionalAddressCount + familyPlan.additionalAddressCount,
-                        largestPrefixAdditionalAddressCount = maxOf(
-                            existing.largestPrefixAdditionalAddressCount,
-                            familyPlan.largestPrefixAdditionalAddressCount,
-                        ),
-                        familyPlans = existing.familyPlans + familyPlan,
-                    )
-                    if (candidate.isBetterThan(next[totalCount])) {
-                        next[totalCount] = candidate
-                    }
-                }
-            }
-            combined = next
+        val addressCount = roots.sumOf { root -> root.trie.addressCount }
+        if (roots.sumOf { root -> root.trie.exactCoverSize } <= maxPrefixes) {
+            return aggregationOf(roots.map { root -> root.family to exactCover(root.trie) }, addressCount)
         }
 
-        val best = combined.withIndex()
-            .filter { (_, plan) -> plan != null }
-            .minWith { first, second -> compareCombined(first.index, first.value!!, second.index, second.value!!) }
-            .value!!
-
-        return IpRangeAggregation(
-            prefixesByFamily = buildMap {
-                roots.forEachIndexed { index, root ->
-                    put(root.family, buildList { best.familyPlans[index].collectPrefixes(this) })
-                }
-            },
-            addressCount = uniqueAddresses.size,
-            additionalAddressCount = best.additionalAddressCount,
-            largestPrefixAdditionalAddressCount = best.largestPrefixAdditionalAddressCount,
+        val plans = roots.map { root -> buildPlans(root.trie, maxPrefixes) }
+        val prefixCounts = allocateBudget(plans, maxPrefixes)
+        return aggregationOf(
+            roots.mapIndexed { index, root -> root.family to selectedPrefixes(plans[index], prefixCounts[index]) },
+            addressCount,
         )
     }
 
-    private fun buildTrie(addresses: List<AddressValue>): TrieNode = buildTrie(addresses, 0, addresses.size)
+    /** Groups [addresses] by family and turns each group into a path-compressed prefix trie. */
+    private fun buildFamilyTries(addresses: Collection<IPAddress>): List<FamilyRoot> {
+        if (addresses.isEmpty()) return emptyList()
 
-    private fun buildTrie(addresses: List<AddressValue>, fromIndex: Int, toIndex: Int): TrieNode {
-        val first = addresses[fromIndex]
+        val values = addresses
+            .map { address ->
+                require(!address.isMultiple) { "Only individual IP addresses can be aggregated" }
+                val normalized = address.withoutPrefixLength()
+                val bytes = normalized.bytes
+                if (normalized.isIPv4) {
+                    AddressValue(IpAddressFamily.IPV4, 0, wordOf(bytes, 0, 4))
+                } else {
+                    AddressValue(IpAddressFamily.IPV6, wordOf(bytes, 0, 8), wordOf(bytes, 8, 16))
+                }
+            }
+            .sortedWith(ADDRESS_ORDER)
+
+        return IpAddressFamily.entries.mapNotNull { family ->
+            val familyValues = values.filter { value -> value.family == family }
+            if (familyValues.isEmpty()) return@mapNotNull null
+
+            val highWords = LongArray(familyValues.size)
+            val lowWords = LongArray(familyValues.size)
+            var size = 0
+            for (value in familyValues) {
+                if (size == 0 || highWords[size - 1] != value.high || lowWords[size - 1] != value.low) {
+                    highWords[size] = value.high
+                    lowWords[size] = value.low
+                    size++
+                }
+            }
+            FamilyRoot(family, buildTrie(family.bitCount, highWords, lowWords, 0, size))
+        }
+    }
+
+    /** Builds the trie over the ascending, de-duplicated address words in `[fromIndex, toIndex)`. */
+    private fun buildTrie(
+        bitCount: Int,
+        highWords: LongArray,
+        lowWords: LongArray,
+        fromIndex: Int,
+        toIndex: Int,
+    ): TrieNode {
+        val high = highWords[fromIndex]
+        val low = lowWords[fromIndex]
         val addressCount = toIndex - fromIndex
         if (addressCount == 1) {
-            return TrieNode(first.bitCount, first.bitCount, first.address, 1)
+            return TrieNode(bitCount, bitCount, high, low, 1, 1)
         }
 
-        val last = addresses[toIndex - 1]
-        val differingBits = first.value.xor(last.value)
-        val commonPrefixLength = first.bitCount - differingBits.bitLength()
-        val splitBit = BigInteger.ONE.shiftLeft(first.bitCount - commonPrefixLength - 1)
+        val commonPrefixLength = bitCount - bitLength(
+            high xor highWords[toIndex - 1],
+            low xor lowWords[toIndex - 1],
+        )
+        val splitBitIndex = bitCount - commonPrefixLength - 1
 
-        var low = fromIndex
-        var high = toIndex
-        while (low < high) {
-            val middle = (low + high) ushr 1
-            if (addresses[middle].value.and(splitBit) == BigInteger.ZERO) {
-                low = middle + 1
+        var lowIndex = fromIndex
+        var highIndex = toIndex
+        while (lowIndex < highIndex) {
+            val middle = (lowIndex + highIndex) ushr 1
+            if (isBitSet(highWords[middle], lowWords[middle], splitBitIndex)) {
+                highIndex = middle
             } else {
-                high = middle
+                lowIndex = middle + 1
             }
         }
 
+        val left = buildTrie(bitCount, highWords, lowWords, fromIndex, lowIndex)
+        val right = buildTrie(bitCount, highWords, lowWords, lowIndex, toIndex)
+        val hostBits = bitCount - commonPrefixLength
+        val coversEveryAddress = hostBits < Long.SIZE_BITS - 1 && addressCount.toLong() == 1L shl hostBits
         return TrieNode(
-            bitCount = first.bitCount,
+            bitCount = bitCount,
             prefixLength = commonPrefixLength,
-            representative = first.address,
+            high = high,
+            low = low,
             addressCount = addressCount,
-            left = buildTrie(addresses, fromIndex, low),
-            right = buildTrie(addresses, low, toIndex),
+            exactCoverSize = if (coversEveryAddress) 1 else left.exactCoverSize + right.exactCoverSize,
+            left = left,
+            right = right,
         )
     }
 
-    private fun buildPlans(node: TrieNode, maxPrefixes: Int): Array<Plan?> {
-        val plans = arrayOfNulls<Plan>(minOf(maxPrefixes, node.addressCount) + 1)
-        val collapseCost = BigInteger.ONE.shiftLeft(node.bitCount - node.prefixLength) -
-            BigInteger.valueOf(node.addressCount.toLong())
-        plans[1] = Plan(collapseCost, collapseCost, Collapse(node))
+    /**
+     * Fills the widening cost of covering [node] with `1..min(maxPrefixes, exactCoverSize)` prefixes.
+     *
+     * Budgets beyond the exact cover cannot improve on it - it already admits no additional
+     * addresses with fewer prefixes - so those columns are left out of the table entirely.
+     */
+    private fun buildPlans(node: TrieNode, maxPrefixes: Int): PlanTable {
+        val left = node.left?.let { child -> buildPlans(child, maxPrefixes) }
+        val right = node.right?.let { child -> buildPlans(child, maxPrefixes) }
+        val plans = PlanTable(node, left, right, minOf(maxPrefixes, node.exactCoverSize))
 
-        val left = node.left ?: return plans
-        val right = node.right ?: return plans
-        val leftPlans = buildPlans(left, maxPrefixes)
-        val rightPlans = buildPlans(right, maxPrefixes)
+        val collapseHigh = node.collapseCostHigh()
+        val collapseLow = node.collapseCostLow()
+        plans.costHigh[1] = collapseHigh
+        plans.costLow[1] = collapseLow
+        plans.widestHigh[1] = collapseHigh
+        plans.widestLow[1] = collapseLow
+        if (left == null || right == null) return plans
 
-        for (leftCount in 1 until leftPlans.size) {
-            val leftPlan = leftPlans[leftCount] ?: continue
-            for (rightCount in 1 until rightPlans.size) {
-                val rightPlan = rightPlans[rightCount] ?: continue
-                val totalCount = leftCount + rightCount
-                if (totalCount >= plans.size) break
+        for (leftCount in 1..minOf(left.size, plans.size - 1)) {
+            val leftHigh = left.costHigh[leftCount]
+            val leftLow = left.costLow[leftCount]
+            val leftWidestHigh = left.widestHigh[leftCount]
+            val leftWidestLow = left.widestLow[leftCount]
+            for (rightCount in 1..minOf(right.size, plans.size - leftCount)) {
+                val costHigh = addHigh(leftHigh, leftLow, right.costHigh[rightCount], right.costLow[rightCount])
+                val costLow = leftLow + right.costLow[rightCount]
+                val rightWidestHigh = right.widestHigh[rightCount]
+                val rightWidestLow = right.widestLow[rightCount]
+                val widestIsLeft =
+                    compare(leftWidestHigh, leftWidestLow, rightWidestHigh, rightWidestLow) >= 0
+                val widestHigh = if (widestIsLeft) leftWidestHigh else rightWidestHigh
+                val widestLow = if (widestIsLeft) leftWidestLow else rightWidestLow
 
-                val candidate = Plan(
-                    additionalAddressCount = leftPlan.additionalAddressCount + rightPlan.additionalAddressCount,
-                    largestPrefixAdditionalAddressCount = maxOf(
-                        leftPlan.largestPrefixAdditionalAddressCount,
-                        rightPlan.largestPrefixAdditionalAddressCount,
-                    ),
-                    decision = Split(leftPlan, rightPlan),
-                )
-                if (candidate.isBetterThan(plans[totalCount])) {
-                    plans[totalCount] = candidate
+                val prefixCount = leftCount + rightCount
+                if (plans.isBetter(prefixCount, costHigh, costLow, widestHigh, widestLow)) {
+                    plans.costHigh[prefixCount] = costHigh
+                    plans.costLow[prefixCount] = costLow
+                    plans.widestHigh[prefixCount] = widestHigh
+                    plans.widestLow[prefixCount] = widestLow
+                    plans.leftPrefixCount[prefixCount] = leftCount
                 }
             }
         }
         return plans
     }
 
-    private fun compareCombined(
-        firstPrefixCount: Int,
-        first: CombinedPlan,
-        secondPrefixCount: Int,
-        second: CombinedPlan,
-    ): Int {
-        val totalComparison = first.additionalAddressCount.compareTo(second.additionalAddressCount)
-        if (totalComparison != 0) return totalComparison
+    /** Splits [maxPrefixes] between the address families, returning the count granted to each. */
+    private fun allocateBudget(plans: List<PlanTable>, maxPrefixes: Int): IntArray {
+        var combined = CombinedTable(maxPrefixes)
+        combined.reachable[0] = true
+        val familyPrefixCounts = List(plans.size) { IntArray(maxPrefixes + 1) }
+        val sum = WideSum()
 
-        val largestComparison = first.largestPrefixAdditionalAddressCount
-            .compareTo(second.largestPrefixAdditionalAddressCount)
-        if (largestComparison != 0) return largestComparison
+        plans.forEachIndexed { familyIndex, familyPlans ->
+            val next = CombinedTable(maxPrefixes)
+            val chosen = familyPrefixCounts[familyIndex]
+            for (existingCount in 0..maxPrefixes) {
+                if (!combined.reachable[existingCount]) continue
+                val existingWidestHigh = combined.widestHigh[existingCount]
+                val existingWidestLow = combined.widestLow[existingCount]
+                for (familyCount in 1..familyPlans.size) {
+                    val prefixCount = existingCount + familyCount
+                    if (prefixCount > maxPrefixes) break
 
-        return firstPrefixCount.compareTo(secondPrefixCount)
+                    sum.set(
+                        combined.costCarry[existingCount],
+                        combined.costHigh[existingCount],
+                        combined.costLow[existingCount],
+                    )
+                    sum.add(familyPlans.costHigh[familyCount], familyPlans.costLow[familyCount])
+                    val familyWidestHigh = familyPlans.widestHigh[familyCount]
+                    val familyWidestLow = familyPlans.widestLow[familyCount]
+                    val widestIsExisting = compare(
+                        existingWidestHigh,
+                        existingWidestLow,
+                        familyWidestHigh,
+                        familyWidestLow,
+                    ) >= 0
+                    val widestHigh = if (widestIsExisting) existingWidestHigh else familyWidestHigh
+                    val widestLow = if (widestIsExisting) existingWidestLow else familyWidestLow
+
+                    if (next.isBetter(prefixCount, sum, widestHigh, widestLow)) {
+                        next.costCarry[prefixCount] = sum.carry
+                        next.costHigh[prefixCount] = sum.high
+                        next.costLow[prefixCount] = sum.low
+                        next.widestHigh[prefixCount] = widestHigh
+                        next.widestLow[prefixCount] = widestLow
+                        next.reachable[prefixCount] = true
+                        chosen[prefixCount] = familyCount
+                    }
+                }
+            }
+            combined = next
+        }
+
+        var bestCount = -1
+        for (prefixCount in 1..maxPrefixes) {
+            if (!combined.reachable[prefixCount]) continue
+            if (bestCount < 0 || combined.isCheaperThan(prefixCount, bestCount)) {
+                bestCount = prefixCount
+            }
+        }
+
+        check(bestCount > 0) { "Every family can be covered by one prefix, so a budget must be reachable" }
+
+        val result = IntArray(plans.size)
+        var remaining = bestCount
+        for (familyIndex in plans.indices.reversed()) {
+            result[familyIndex] = familyPrefixCounts[familyIndex][remaining]
+            remaining -= result[familyIndex]
+        }
+        return result
     }
 
-    private data class AddressValue(
-        val family: IpAddressFamily,
-        val value: BigInteger,
-        val address: IPAddress,
-    ) {
-        val bitCount: Int = family.bitCount
+    /** Walks the decisions recorded in [plans] and returns the prefixes of the chosen cover. */
+    private fun selectedPrefixes(plans: PlanTable, prefixCount: Int): List<TrieNode> =
+        buildList { collectSelectedPrefixes(plans, prefixCount, this) }
+
+    private fun collectSelectedPrefixes(plans: PlanTable, prefixCount: Int, destination: MutableList<TrieNode>) {
+        val leftPrefixCount = plans.leftPrefixCount[prefixCount]
+        if (leftPrefixCount == COLLAPSE) {
+            destination.add(plans.node)
+            return
+        }
+        collectSelectedPrefixes(plans.left!!, leftPrefixCount, destination)
+        collectSelectedPrefixes(plans.right!!, prefixCount - leftPrefixCount, destination)
     }
 
-    private data class FamilyRoot(
-        val family: IpAddressFamily,
-        val trie: TrieNode,
-    )
+    /** Returns the smallest set of prefixes that covers the addresses of [node] and nothing else. */
+    private fun exactCover(node: TrieNode): List<TrieNode> = buildList { collectExactCover(node, this) }
 
-    private data class TrieNode(
-        val bitCount: Int,
-        val prefixLength: Int,
-        val representative: IPAddress,
-        val addressCount: Int,
-        val left: TrieNode? = null,
-        val right: TrieNode? = null,
-    ) {
-        fun toPrefix(): String = representative.setPrefixLength(prefixLength).toPrefixBlock().toCanonicalString()
+    private fun collectExactCover(node: TrieNode, destination: MutableList<TrieNode>) {
+        if (node.exactCoverSize == 1) {
+            destination.add(node)
+            return
+        }
+        collectExactCover(node.left!!, destination)
+        collectExactCover(node.right!!, destination)
     }
 
-    private data class Plan(
-        val additionalAddressCount: BigInteger,
-        val largestPrefixAdditionalAddressCount: BigInteger,
-        val decision: Decision,
-    ) {
-        fun isBetterThan(other: Plan?): Boolean = other == null ||
-            additionalAddressCount < other.additionalAddressCount ||
-            (
-                additionalAddressCount == other.additionalAddressCount &&
-                    largestPrefixAdditionalAddressCount < other.largestPrefixAdditionalAddressCount
-                )
-
-        fun collectPrefixes(destination: MutableList<String>) {
-            when (val selected = decision) {
-                is Collapse -> destination.add(selected.node.toPrefix())
-                is Split -> {
-                    selected.left.collectPrefixes(destination)
-                    selected.right.collectPrefixes(destination)
+    private fun aggregationOf(
+        selectionsByFamily: List<Pair<IpAddressFamily, List<TrieNode>>>,
+        addressCount: Int,
+    ): IpRangeAggregation {
+        var additionalAddressCount = BigInteger.ZERO
+        var largestPrefixAdditionalAddressCount = BigInteger.ZERO
+        for ((_, nodes) in selectionsByFamily) {
+            for (node in nodes) {
+                val nodeAdditionalAddressCount = node.additionalAddressCount()
+                additionalAddressCount += nodeAdditionalAddressCount
+                if (nodeAdditionalAddressCount > largestPrefixAdditionalAddressCount) {
+                    largestPrefixAdditionalAddressCount = nodeAdditionalAddressCount
                 }
             }
         }
+        return IpRangeAggregation(
+            prefixesByFamily = selectionsByFamily.associate { (family, nodes) ->
+                family to nodes.map { node -> node.toPrefix() }
+            },
+            addressCount = addressCount,
+            additionalAddressCount = additionalAddressCount,
+            largestPrefixAdditionalAddressCount = largestPrefixAdditionalAddressCount,
+        )
     }
 
-    private data class CombinedPlan(
-        val additionalAddressCount: BigInteger,
-        val largestPrefixAdditionalAddressCount: BigInteger,
-        val familyPlans: List<Plan>,
+    private val ADDRESS_ORDER = Comparator<AddressValue> { first, second ->
+        val familyComparison = first.family.compareTo(second.family)
+        if (familyComparison != 0) {
+            familyComparison
+        } else {
+            compare(first.high, first.low, second.high, second.low)
+        }
+    }
+
+    private class AddressValue(val family: IpAddressFamily, val high: Long, val low: Long)
+
+    private class FamilyRoot(val family: IpAddressFamily, val trie: TrieNode)
+
+    private class TrieNode(
+        val bitCount: Int,
+        val prefixLength: Int,
+        val high: Long,
+        val low: Long,
+        val addressCount: Int,
+        val exactCoverSize: Int,
+        val left: TrieNode? = null,
+        val right: TrieNode? = null,
     ) {
-        fun isBetterThan(other: CombinedPlan?): Boolean = other == null ||
-            additionalAddressCount < other.additionalAddressCount ||
-            (
-                additionalAddressCount == other.additionalAddressCount &&
-                    largestPrefixAdditionalAddressCount < other.largestPrefixAdditionalAddressCount
-                )
+        private val hostBits: Int get() = bitCount - prefixLength
+
+        /** Low word of `2^hostBits - addressCount`, the additional addresses this prefix admits. */
+        fun collapseCostLow(): Long = powerOfTwoLow(hostBits) - addressCount
+
+        /** High word of `2^hostBits - addressCount`, borrowing from the low word where needed. */
+        fun collapseCostHigh(): Long {
+            val low = powerOfTwoLow(hostBits)
+            val borrow = if (compareUnsigned(low, addressCount.toLong()) < 0) 1L else 0L
+            return powerOfTwoHigh(hostBits) - borrow
+        }
+
+        fun additionalAddressCount(): BigInteger =
+            BigInteger.ONE.shiftLeft(hostBits) - BigInteger.valueOf(addressCount.toLong())
+
+        fun toPrefix(): String {
+            val address: IPAddress = if (bitCount == IpAddressFamily.IPV4.bitCount) {
+                IPv4Address(low.toInt())
+            } else {
+                IPv6Address(ByteArray(16) { index -> byteOf(high, low, index) })
+            }
+            return address.setPrefixLength(prefixLength).toPrefixBlock().toCanonicalString()
+        }
     }
 
-    private sealed interface Decision
+    /**
+     * Widening costs of covering one trie node, indexed by the number of prefixes spent on it.
+     * [leftPrefixCount] records how many prefixes the best split of a budget grants to the left
+     * child, or [COLLAPSE] when the whole subtree becomes one prefix. A budget that no split has
+     * filled in yet reads as [COLLAPSE] too, which is harmless: only a budget of one prefix
+     * leaves a subtree no choice but to collapse.
+     */
+    private class PlanTable(val node: TrieNode, val left: PlanTable?, val right: PlanTable?, val size: Int) {
+        val costHigh = LongArray(size + 1)
+        val costLow = LongArray(size + 1)
+        val widestHigh = LongArray(size + 1)
+        val widestLow = LongArray(size + 1)
+        val leftPrefixCount = IntArray(size + 1)
 
-    private data class Collapse(val node: TrieNode) : Decision
+        fun isBetter(prefixCount: Int, costHigh: Long, costLow: Long, widestHigh: Long, widestLow: Long): Boolean {
+            if (leftPrefixCount[prefixCount] == COLLAPSE) return true
+            val costComparison = compare(costHigh, costLow, this.costHigh[prefixCount], this.costLow[prefixCount])
+            if (costComparison != 0) return costComparison < 0
+            return compare(widestHigh, widestLow, this.widestHigh[prefixCount], this.widestLow[prefixCount]) < 0
+        }
+    }
 
-    private data class Split(val left: Plan, val right: Plan) : Decision
+    /**
+     * Widening costs of covering all address families, indexed by the total number of prefixes.
+     * Two families can together admit slightly more than 2^128 additional addresses, so the cost
+     * carries a third word.
+     */
+    private class CombinedTable(maxPrefixes: Int) {
+        val reachable = BooleanArray(maxPrefixes + 1)
+        val costCarry = LongArray(maxPrefixes + 1)
+        val costHigh = LongArray(maxPrefixes + 1)
+        val costLow = LongArray(maxPrefixes + 1)
+        val widestHigh = LongArray(maxPrefixes + 1)
+        val widestLow = LongArray(maxPrefixes + 1)
+
+        fun isBetter(prefixCount: Int, cost: WideSum, widestHigh: Long, widestLow: Long): Boolean {
+            if (!reachable[prefixCount]) return true
+            val costComparison = cost.compareTo(costCarry[prefixCount], costHigh[prefixCount], costLow[prefixCount])
+            if (costComparison != 0) return costComparison < 0
+            return compare(widestHigh, widestLow, this.widestHigh[prefixCount], this.widestLow[prefixCount]) < 0
+        }
+
+        /** Compares two reachable budgets, preferring cheap covers, then narrow prefixes, then few prefixes. */
+        fun isCheaperThan(prefixCount: Int, other: Int): Boolean {
+            val carryComparison = costCarry[prefixCount].compareTo(costCarry[other])
+            if (carryComparison != 0) return carryComparison < 0
+            val costComparison = compare(costHigh[prefixCount], costLow[prefixCount], costHigh[other], costLow[other])
+            if (costComparison != 0) return costComparison < 0
+            val widestComparison =
+                compare(widestHigh[prefixCount], widestLow[prefixCount], widestHigh[other], widestLow[other])
+            if (widestComparison != 0) return widestComparison < 0
+            return prefixCount < other
+        }
+    }
+
+    /** Reusable 192-bit accumulator, so summing family costs allocates nothing. */
+    private class WideSum {
+        var carry = 0L
+        var high = 0L
+        var low = 0L
+
+        fun set(carry: Long, high: Long, low: Long) {
+            this.carry = carry
+            this.high = high
+            this.low = low
+        }
+
+        fun add(high: Long, low: Long) {
+            val sumLow = this.low + low
+            val lowCarry = if (compareUnsigned(sumLow, this.low) < 0) 1L else 0L
+            val sumHigh = this.high + high
+            var highCarry = if (compareUnsigned(sumHigh, this.high) < 0) 1L else 0L
+            val carriedHigh = sumHigh + lowCarry
+            if (compareUnsigned(carriedHigh, sumHigh) < 0) highCarry++
+            this.low = sumLow
+            this.high = carriedHigh
+            this.carry += highCarry
+        }
+
+        fun compareTo(carry: Long, high: Long, low: Long): Int {
+            val carryComparison = this.carry.compareTo(carry)
+            return if (carryComparison != 0) carryComparison else compare(this.high, this.low, high, low)
+        }
+    }
+}
+
+/** Marks a budget of one prefix, which can only be spent by collapsing the whole subtree. */
+private const val COLLAPSE = 0
+
+/** Reads the big-endian bytes `[fromIndex, toIndex)` as an unsigned word. */
+private fun wordOf(bytes: ByteArray, fromIndex: Int, toIndex: Int): Long {
+    var word = 0L
+    for (index in fromIndex until toIndex) {
+        word = (word shl Byte.SIZE_BITS) or (bytes[index].toLong() and 0xFF)
+    }
+    return word
+}
+
+private fun byteOf(high: Long, low: Long, index: Int): Byte {
+    val word = if (index < Long.SIZE_BYTES) high else low
+    return (word ushr ((Long.SIZE_BYTES - 1 - (index % Long.SIZE_BYTES)) * Byte.SIZE_BITS)).toByte()
+}
+
+private fun powerOfTwoLow(exponent: Int): Long = if (exponent < Long.SIZE_BITS) 1L shl exponent else 0L
+
+private fun powerOfTwoHigh(exponent: Int): Long =
+    if (exponent in Long.SIZE_BITS until 2 * Long.SIZE_BITS) 1L shl (exponent - Long.SIZE_BITS) else 0L
+
+private fun bitLength(high: Long, low: Long): Int = if (high != 0L) {
+    2 * Long.SIZE_BITS - java.lang.Long.numberOfLeadingZeros(high)
+} else {
+    Long.SIZE_BITS - java.lang.Long.numberOfLeadingZeros(low)
+}
+
+private fun isBitSet(high: Long, low: Long, index: Int): Boolean = if (index < Long.SIZE_BITS) {
+    (low ushr index) and 1L != 0L
+} else {
+    (high ushr (index - Long.SIZE_BITS)) and 1L != 0L
+}
+
+/** Adds two unsigned 128-bit values and returns the high word of the sum. */
+private fun addHigh(firstHigh: Long, firstLow: Long, secondHigh: Long, secondLow: Long): Long {
+    val low = firstLow + secondLow
+    return firstHigh + secondHigh + if (compareUnsigned(low, firstLow) < 0) 1L else 0L
+}
+
+private fun compare(firstHigh: Long, firstLow: Long, secondHigh: Long, secondLow: Long): Int {
+    val highComparison = compareUnsigned(firstHigh, secondHigh)
+    return if (highComparison != 0) highComparison else compareUnsigned(firstLow, secondLow)
 }
