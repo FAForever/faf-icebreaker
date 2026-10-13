@@ -171,7 +171,8 @@ class SessionService(
     // The `delayed` parameter is an inelegant way to avoid a startup race where
     // the events-out channel isn't ready by the time Quarkus tries to run this method,
     // causing error messages when running the tests.
-    @Scheduled(delayed = "10s", every = "10m")
+    // Tests disable the schedule and call this directly, as a concurrent run would race with them.
+    @Scheduled(delayed = "10s", every = "\${session-cleanup-interval:10m}")
     fun cleanUpSessions() {
         val cleanupTime = clock.instant().minus(fafProperties.maxSessionLifeTimeHours(), ChronoUnit.HOURS)
         LOG.info("Cleaning up sessions older than $cleanupTime")
