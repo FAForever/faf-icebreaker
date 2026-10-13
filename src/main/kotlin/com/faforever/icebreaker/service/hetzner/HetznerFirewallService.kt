@@ -120,15 +120,18 @@ class HetznerFirewallService(
     /** Removes all whitelists for session [sessionId]. */
     fun removeWhitelistsForSession(sessionId: String) {
         LOG.debug("Removing whitelist for session {}", sessionId)
-        repository.markSessionAsDeleted(sessionId)
-        syncFirewall()
+        // Sessions without whitelists (or already cleaned up ones) leave the firewall unchanged.
+        if (repository.markSessionAsDeleted(sessionId) > 0) {
+            syncFirewall()
+        }
     }
 
     /** Removes only the whitelist for user [userId] in session [sessionId]. */
     fun removeWhitelistForSessionUser(userId: Long, sessionId: String) {
         LOG.debug("Removing user {}'s whitelist for session {}", userId, sessionId)
-        repository.markSessionUserAsDeleted(sessionId, userId)
-        syncFirewall()
+        if (repository.markSessionUserAsDeleted(sessionId, userId) > 0) {
+            syncFirewall()
+        }
     }
 
     /**

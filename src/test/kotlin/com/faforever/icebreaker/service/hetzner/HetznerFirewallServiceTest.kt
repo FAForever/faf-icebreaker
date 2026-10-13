@@ -152,6 +152,20 @@ internal class HetznerFirewallServiceTest {
     }
 
     @Test
+    fun `Removing whitelists that do not exist does not sync`() {
+        service.whitelistIpForSession("game/200", userId = 123, ipAddress = "1.2.3.4")
+        service.removeWhitelistsForSession("game/200")
+        val callCount = hetznerApi.getCallCount()
+
+        // Repeated cleanup of a closed session and sessions without whitelists
+        service.removeWhitelistsForSession("game/200")
+        service.removeWhitelistsForSession("game/201")
+        service.removeWhitelistForSessionUser(123, "game/200")
+
+        assertThat(hetznerApi.getCallCount()).isEqualTo(callCount)
+    }
+
+    @Test
     fun `Whitelist syncing is rate-limited`() {
         // First call goes through immediately
         val countBeforeFirst = hetznerApi.getCallCount()
