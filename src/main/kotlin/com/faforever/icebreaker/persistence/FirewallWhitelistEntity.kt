@@ -49,8 +49,10 @@ interface FirewallWhitelistRepository {
     fun persistOrGet(entity: FirewallWhitelistEntity): FirewallWhitelistEntity
     fun getForSessionId(sessionId: String): List<FirewallWhitelistEntity>
     fun getAllActive(): List<FirewallWhitelistEntity>
-    fun markSessionAsDeleted(sessionId: String)
-    fun markSessionUserAsDeleted(sessionId: String, userId: Long)
+
+    // Both return the number of whitelists that were marked as deleted.
+    fun markSessionAsDeleted(sessionId: String): Int
+    fun markSessionUserAsDeleted(sessionId: String, userId: Long): Int
     fun deleteAll(): Long
 }
 
@@ -84,16 +86,14 @@ class FirewallWhitelistPanacheRepository(
     override fun getAllActive(): List<FirewallWhitelistEntity> =
         find("deletedAt is null order by createdAt").list()
 
-    override fun markSessionAsDeleted(sessionId: String) {
+    override fun markSessionAsDeleted(sessionId: String): Int =
         update("deletedAt = ?1 where sessionId = ?2 and deletedAt is null", clock.instant(), sessionId)
-    }
 
-    override fun markSessionUserAsDeleted(sessionId: String, userId: Long) {
+    override fun markSessionUserAsDeleted(sessionId: String, userId: Long): Int =
         update(
             "deletedAt = ?1 where sessionId = ?2 and userId = ?3 and deletedAt is null",
             clock.instant(),
             sessionId,
             userId,
         )
-    }
 }

@@ -46,22 +46,28 @@ class InMemoryFirewallWhitelistRepository(
 
     override fun getAllActive(): List<FirewallWhitelistEntity> = allowedIps.filter { it.deletedAt == null }.sortedBy { it.createdAt }
 
-    override fun markSessionAsDeleted(sessionId: String) {
+    override fun markSessionAsDeleted(sessionId: String): Int {
+        var count = 0
         allowedIps.replaceAll {
             if (it.sessionId == sessionId && it.deletedAt == null) {
                 it.deletedAt = clock.instant()
+                count++
             }
             it
         }
+        return count
     }
 
-    override fun markSessionUserAsDeleted(sessionId: String, userId: Long) {
+    override fun markSessionUserAsDeleted(sessionId: String, userId: Long): Int {
+        var count = 0
         allowedIps.replaceAll {
             if (it.sessionId == sessionId && it.userId == userId && it.deletedAt == null) {
                 it.deletedAt = clock.instant()
+                count++
             }
             it
         }
+        return count
     }
 
     override fun deleteAll(): Long {
