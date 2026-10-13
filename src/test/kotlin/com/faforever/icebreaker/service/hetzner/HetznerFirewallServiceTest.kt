@@ -187,6 +187,31 @@ internal class HetznerFirewallServiceTest {
     }
 
     @Test
+    fun `Concurrent sync requests are batched into one Hetzner call`() {
+        service.whitelistIpForSession("game/201", userId = 123, "1.2.3.4")
+
+        scheduler.pause()
+        val countBeforePause = hetznerApi.getCallCount()
+
+        val pendingRequests = listOf(234L, 345L, 456L).mapIndexed { index, userId ->
+            CompletableFuture.runAsync {
+                service.whitelistIpForSession("game/201", userId = userId, "10.0.$index.1")
+            }
+        }
+
+        // All requests must be buffered at once, not delivered one per sync
+        runBlocking {
+            waitUntil { updater.numPendingRequests() == pendingRequests.size }
+        }
+
+        scheduler.resume()
+        CompletableFuture.allOf(*pendingRequests.toTypedArray()).join()
+
+        assertThat(hetznerApi.getCallCount()).isEqualTo(countBeforePause + 1)
+        assertThat(hetznerApi.getRulesByFirewallId("fwid")!!.allSourceIps()).hasSize(4)
+    }
+
+    @Test
     fun `IPs split across multiple rules`() {
         service.whitelistIpForSession("game/201", userId = 123, "1.2.3.4")
         service.whitelistIpForSession("game/201", userId = 234, "2.3.4.5")

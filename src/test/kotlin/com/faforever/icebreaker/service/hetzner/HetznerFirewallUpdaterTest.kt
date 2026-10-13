@@ -9,8 +9,8 @@ import org.eclipse.microprofile.reactive.messaging.Emitter
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.mock
-import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
+import org.mockito.Mockito.verifyNoMoreInteractions
 import org.mockito.Mockito.`when`
 import java.time.Instant
 import java.util.Optional
@@ -89,33 +89,72 @@ internal class HetznerFirewallUpdaterTest {
     }
 
     @Test
-    fun `Synchronous response failure does not leave later acknowledgements pending`() {
+    fun `Batch is answered with a single response`() {
         val properties = mock(HetznerProperties::class.java)
-        val repository = mock(FirewallWhitelistRepository::class.java)
-        val client = mock(HetznerApiClient::class.java)
-
-        @Suppress("UNCHECKED_CAST")
-        val emitter = mock(Emitter::class.java) as Emitter<SyncMessage>
-        val sendFailure = IllegalStateException("response channel overflow")
-        val firstRequest = mock(JsonObject::class.java)
-        val secondRequest = mock(JsonObject::class.java)
-
+        val emitter = responseEmitter()
         `when`(properties.firewallId()).thenReturn(Optional.empty())
-        `when`(emitter.send(any(SyncMessage::class.java)))
-            .thenThrow(sendFailure)
-            .thenReturn(CompletableFuture.completedFuture(null))
-        `when`(firstRequest.mapTo(SyncMessage::class.java)).thenReturn(SyncMessage("first"))
-        `when`(secondRequest.mapTo(SyncMessage::class.java)).thenReturn(SyncMessage("second"))
+        `when`(emitter.send(any(SyncResponse::class.java))).thenReturn(CompletableFuture.completedFuture(null))
 
-        val updater = HetznerFirewallUpdater(properties, repository, client, emitter)
-        val firstAck = updater.handle(firstRequest).toCompletableFuture()
-        val secondAck = updater.handle(secondRequest).toCompletableFuture()
-
+        val updater = updaterWithRequests(properties, emitter, "first", "second", "third")
         updater.syncFirewallWithHetzner()
 
-        assertThat(firstAck).isCompletedExceptionally
-        assertThat(secondAck).isCompletedWithValue(Unit)
-        verify(emitter, times(2)).send(any(SyncMessage::class.java))
+        verify(emitter).send(SyncResponse(listOf("first", "second", "third")))
+        verifyNoMoreInteractions(emitter)
+        assertThat(updater.numPendingRequests()).isZero()
+    }
+
+    @Test
+    fun `Failed sync is reported to the whole batch in a single response`() {
+        val properties = mock(HetznerProperties::class.java)
+        val emitter = responseEmitter()
+        `when`(properties.firewallId()).thenReturn(Optional.of("fwid"))
+        `when`(properties.maxEffectiveRules()).thenReturn(500)
+        `when`(properties.maxIpsPerRule()).thenReturn(100)
+        `when`(emitter.send(any(SyncResponse::class.java))).thenReturn(CompletableFuture.completedFuture(null))
+
+        val repository = mock(FirewallWhitelistRepository::class.java)
+        val client = mock(HetznerApiClient::class.java)
+        `when`(repository.getAllActive()).thenReturn(emptyList())
+        `when`(client.setFirewallRules("fwid", SetFirewallRulesRequest(emptyList()))).thenThrow(RuntimeException("Hetzner unavailable"))
+
+        val updater = updaterWithRequests(properties, emitter, "first", "second", repository = repository, client = client)
+        updater.syncFirewallWithHetzner()
+
+        verify(emitter).send(SyncResponse(listOf("first", "second"), "Hetzner firewall update failed"))
+        verifyNoMoreInteractions(emitter)
+    }
+
+    @Test
+    fun `Synchronous response failure does not break the sync`() {
+        val properties = mock(HetznerProperties::class.java)
+        val emitter = responseEmitter()
+        `when`(properties.firewallId()).thenReturn(Optional.empty())
+        `when`(emitter.send(any(SyncResponse::class.java)))
+            .thenThrow(IllegalStateException("response channel overflow"))
+
+        val updater = updaterWithRequests(properties, emitter, "first")
+        updater.syncFirewallWithHetzner()
+
+        assertThat(updater.numPendingRequests()).isZero()
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun responseEmitter() = mock(Emitter::class.java) as Emitter<SyncResponse>
+
+    private fun updaterWithRequests(
+        properties: HetznerProperties,
+        emitter: Emitter<SyncResponse>,
+        vararg requestIds: String,
+        repository: FirewallWhitelistRepository = mock(FirewallWhitelistRepository::class.java),
+        client: HetznerApiClient = mock(HetznerApiClient::class.java),
+    ): HetznerFirewallUpdater {
+        val updater = HetznerFirewallUpdater(properties, repository, client, emitter)
+        requestIds.forEach { id ->
+            val request = mock(JsonObject::class.java)
+            `when`(request.mapTo(SyncRequest::class.java)).thenReturn(SyncRequest(id))
+            updater.handle(request)
+        }
+        return updater
     }
 
     private fun buildRequest(
@@ -128,7 +167,7 @@ internal class HetznerFirewallUpdaterTest {
         val client = mock(HetznerApiClient::class.java)
 
         @Suppress("UNCHECKED_CAST")
-        val emitter = mock(Emitter::class.java) as Emitter<SyncMessage>
+        val emitter = mock(Emitter::class.java) as Emitter<SyncResponse>
 
         `when`(properties.maxEffectiveRules()).thenReturn(maxEffectiveRules)
         `when`(properties.maxIpsPerRule()).thenReturn(maxIpsPerRule)

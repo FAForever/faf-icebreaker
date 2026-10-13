@@ -5,6 +5,7 @@ import com.faforever.icebreaker.persistence.FirewallWhitelistRepository
 import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.FirewallRule
 import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.FirewallRule.Direction
 import com.faforever.icebreaker.service.hetzner.SetFirewallRulesRequest.FirewallRule.Protocol
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import inet.ipaddr.AddressStringParameters.RangeParameters
 import inet.ipaddr.IPAddress
 import inet.ipaddr.IPAddressString
@@ -24,7 +25,6 @@ import java.io.IOException
 import java.time.Clock
 import java.util.*
 import java.util.concurrent.CompletableFuture
-import java.util.concurrent.CompletionStage
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.TimeUnit
@@ -64,11 +64,19 @@ private fun String.toIpAddress(): IPAddress? = try {
     null
 }
 
-/** Requests a sync or reports the outcome of a requested sync. */
-data class SyncMessage(
-    /** A unique identifier for this request/response pair. Used to pair requests and responses. */
+/** Requests a sync of the firewall rules with Hetzner. */
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class SyncRequest(
+    /** A unique identifier for this request. Used to pair the request with its [SyncResponse]. */
     val id: String,
-    /** A stable error message for failed responses; null for requests and successful responses. */
+)
+
+/** Reports the outcome of one sync to all requests it resolved. */
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class SyncResponse(
+    /** The IDs of all [SyncRequest]s resolved by the sync. */
+    val requestIds: List<String> = emptyList(),
+    /** A stable error message if the sync failed; null if it succeeded. */
     val error: String? = null,
 )
 
@@ -85,11 +93,11 @@ data class SyncMessage(
 class HetznerFirewallService(
     private val repository: FirewallWhitelistRepository,
     private val clock: Clock,
-    @param:Channel("hetzner-request-out") private val requestEmitter: Emitter<SyncMessage>,
+    @param:Channel("hetzner-request-out") private val requestEmitter: Emitter<SyncRequest>,
 ) {
     /**
-     * Maps from the ID of a SyncMessage to a future that will be completed when a
-     * [SyncMessage] acknowledgement with that ID is received.
+     * Maps from the ID of a [SyncRequest] to a future that will be completed when a
+     * [SyncResponse] containing that ID is received.
      */
     private val awaitedMessagesById = ConcurrentHashMap<String, CompletableFuture<Unit>>()
 
@@ -133,7 +141,7 @@ class HetznerFirewallService(
         val requestId = UUID.randomUUID().toString()
         val future = CompletableFuture<Unit>()
         awaitedMessagesById[requestId] = future
-        requestEmitter.send(SyncMessage(requestId)).thenCompose { future }.toCompletableFuture()
+        requestEmitter.send(SyncRequest(requestId)).thenCompose { future }.toCompletableFuture()
             .orTimeout(10, TimeUnit.SECONDS).whenComplete { _, _ ->
                 awaitedMessagesById.remove(requestId)
             }.join()
@@ -141,15 +149,17 @@ class HetznerFirewallService(
 
     @Incoming("hetzner-response-in")
     fun handle(json: JsonObject) {
-        val response = json.mapTo(SyncMessage::class.java)
-        // The message is a response to a previous request; we
-        // complete the future that that request is waiting for.
-        LOG.trace("Received Hetzner response for request {}", response.id)
-        val future = awaitedMessagesById.remove(response.id)
-        if (response.error == null) {
-            future?.complete(Unit)
-        } else {
-            future?.completeExceptionally(IOException(response.error))
+        val response = json.mapTo(SyncResponse::class.java)
+        // The message resolves a batch of requests, possibly sent by other instances or
+        // already timed out; we complete the futures of the requests this instance awaits.
+        LOG.trace("Received Hetzner response for {} requests", response.requestIds.size)
+        response.requestIds.forEach { requestId ->
+            val future = awaitedMessagesById.remove(requestId)
+            if (response.error == null) {
+                future?.complete(Unit)
+            } else {
+                future?.completeExceptionally(IOException(response.error))
+            }
         }
         // The response is acked when this function returns
     }
@@ -160,22 +170,25 @@ internal class HetznerFirewallUpdater(
     private val hetznerProperties: HetznerProperties,
     private val repository: FirewallWhitelistRepository,
     @param:RestClient private val hetznerClient: HetznerApiClient,
-    @param:Channel("hetzner-response-out") private val responseEmitter: Emitter<SyncMessage>,
+    @param:Channel("hetzner-response-out") private val responseEmitter: Emitter<SyncResponse>,
 ) {
-    private data class BufferedMessage(val payload: SyncMessage, val ack: CompletableFuture<Unit>)
-
     // Requests waiting to be resolved the next time [syncFirewallWithHetzner] runs.
-    private val requestQueue = ConcurrentLinkedQueue<BufferedMessage>()
+    private val requestQueue = ConcurrentLinkedQueue<SyncRequest>()
 
     internal fun numPendingRequests() = requestQueue.size
 
+    /**
+     * Buffers a sync request for the next [syncFirewallWithHetzner] run.
+     *
+     * The message is acked as soon as this function returns. It must not return a
+     * CompletionStage that completes after the sync: SmallRye only delivers the next
+     * message once that stage completes, which would serialize the requests to one
+     * per sync run and defeat the batching. Losing a buffered request on a crash is
+     * harmless, as its requester times out and every sync applies the full state.
+     */
     @Incoming("hetzner-request-in")
-    fun handle(json: JsonObject): CompletionStage<Unit> {
-        val request = json.mapTo(SyncMessage::class.java)
-        val ack = CompletableFuture<Unit>()
-        requestQueue.add(BufferedMessage(request, ack))
-        // The message is acked when `ack` is marked as completed.
-        return ack
+    fun handle(json: JsonObject) {
+        requestQueue.add(json.mapTo(SyncRequest::class.java))
     }
 
     // We delay by 3s to make it more likely that RabbitMQ is running by the time this method
@@ -255,25 +268,23 @@ internal class HetznerFirewallUpdater(
         }
     }
 
-    private fun respondWithFailure(batch: List<BufferedMessage>) {
+    private fun respondWithFailure(batch: List<SyncRequest>) {
         respond(batch, "Hetzner firewall update failed")
     }
 
-    private fun respond(batch: List<BufferedMessage>, error: String? = null) {
-        batch.forEach { message ->
-            val response = try {
-                responseEmitter.send(message.payload.copy(error = error))
-            } catch (e: IllegalStateException) {
-                message.ack.completeExceptionally(e)
-                return@forEach
-            }
-            response.whenComplete { _, responseError ->
-                if (responseError == null) {
-                    message.ack.complete(Unit)
-                } else {
-                    message.ack.completeExceptionally(responseError)
+    /** Answers the whole [batch] with a single response, however many requests it holds. */
+    private fun respond(batch: List<SyncRequest>, error: String? = null) {
+        if (batch.isEmpty()) {
+            return
+        }
+        try {
+            responseEmitter.send(SyncResponse(batch.map { it.id }, error)).whenComplete { _, responseError ->
+                if (responseError != null) {
+                    LOG.warn("Failed to send Hetzner sync response for {} requests", batch.size, responseError)
                 }
             }
+        } catch (e: IllegalStateException) {
+            LOG.warn("Failed to send Hetzner sync response for {} requests", batch.size, e)
         }
     }
 
