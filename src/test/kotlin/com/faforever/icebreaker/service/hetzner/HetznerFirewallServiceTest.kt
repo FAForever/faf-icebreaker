@@ -20,6 +20,7 @@ import org.junit.jupiter.api.TestInstance
 import java.io.IOException
 import java.util.*
 import java.util.concurrent.CompletableFuture
+import kotlin.time.Duration.Companion.seconds
 
 @Dependent
 class HetznerFirewallServiceTestConfig {
@@ -56,6 +57,13 @@ internal class HetznerFirewallServiceTest {
     fun setup() {
         hetznerApi.reset()
         firewallWhitelistRepository.deleteAll()
+        // A sync failure from an earlier test makes the updater retry in the background,
+        // which would add unexpected Hetzner calls. Wait until such a retry succeeded.
+        runBlocking {
+            // Covers the maximum retry backoff of ~60s
+            waitUntil(timeout = 70.seconds) { !updater.isRetryPending() }
+        }
+        hetznerApi.resetCallCount()
     }
 
     @Test

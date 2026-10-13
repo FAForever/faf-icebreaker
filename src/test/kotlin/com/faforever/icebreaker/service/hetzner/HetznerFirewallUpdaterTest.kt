@@ -9,6 +9,7 @@ import org.eclipse.microprofile.reactive.messaging.Emitter
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoMoreInteractions
 import org.mockito.Mockito.`when`
@@ -122,6 +123,42 @@ internal class HetznerFirewallUpdaterTest {
 
         verify(emitter).send(SyncResponse(listOf("first", "second"), "Hetzner firewall update failed"))
         verifyNoMoreInteractions(emitter)
+    }
+
+    @Test
+    fun `Failed sync is retried without new requests and backs off`() {
+        val properties = mock(HetznerProperties::class.java)
+        val emitter = responseEmitter()
+        `when`(properties.firewallId()).thenReturn(Optional.of("fwid"))
+        `when`(properties.maxEffectiveRules()).thenReturn(500)
+        `when`(properties.maxIpsPerRule()).thenReturn(100)
+        `when`(emitter.send(any(SyncResponse::class.java))).thenReturn(CompletableFuture.completedFuture(null))
+
+        val repository = mock(FirewallWhitelistRepository::class.java)
+        val client = mock(HetznerApiClient::class.java)
+        val request = SetFirewallRulesRequest(emptyList())
+        `when`(repository.getAllActive()).thenReturn(emptyList())
+        `when`(client.setFirewallRules("fwid", request))
+            .thenThrow(RuntimeException("Hetzner unavailable"))
+            .thenThrow(RuntimeException("Hetzner unavailable"))
+            .thenReturn(SetFirewallRulesResponse(emptyList()))
+
+        val updater = updaterWithRequests(properties, emitter, "first", repository = repository, client = client)
+        // First failure, then an immediate retry that fails again
+        updater.syncFirewallWithHetzner()
+        updater.syncFirewallWithHetzner()
+        verify(client, times(2)).setFirewallRules("fwid", request)
+
+        // The second failure skips one run before retrying
+        updater.syncFirewallWithHetzner()
+        verify(client, times(2)).setFirewallRules("fwid", request)
+        updater.syncFirewallWithHetzner()
+        verify(client, times(3)).setFirewallRules("fwid", request)
+
+        // The successful retry ends the retries
+        updater.syncFirewallWithHetzner()
+        updater.syncFirewallWithHetzner()
+        verify(client, times(3)).setFirewallRules("fwid", request)
     }
 
     @Test

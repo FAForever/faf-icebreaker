@@ -32,6 +32,9 @@ import kotlin.jvm.optionals.getOrNull
 
 private val LOG: Logger = LoggerFactory.getLogger(HetznerFirewallService::class.java)
 
+/** Upper bound for the number of sync runs skipped between retries of a failed sync. */
+private const val MAX_RETRY_BACKOFF_RUNS = 29
+
 private val IP_ADDRESS_VALIDATION_OPTIONS = IPAddressStringParameters.Builder()
     .allowEmpty(false)
     .allowAll(false)
@@ -178,7 +181,19 @@ internal class HetznerFirewallUpdater(
     // Requests waiting to be resolved the next time [syncFirewallWithHetzner] runs.
     private val requestQueue = ConcurrentLinkedQueue<SyncRequest>()
 
+    // Number of consecutive failed syncs. While positive, Hetzner may lag behind the
+    // database, so we retry even without pending requests: a removal that was persisted
+    // but failed to sync would otherwise only reach Hetzner with some unrelated request.
+    // Only the single active consumer receives requests, so only it ever retries.
+    @Volatile
+    private var consecutiveFailures = 0
+
+    // Sync runs to skip before the next retry, backing off exponentially from 2s to ~60s.
+    private var runsUntilRetry = 0
+
     internal fun numPendingRequests() = requestQueue.size
+
+    internal fun isRetryPending() = consecutiveFailures > 0
 
     /**
      * Buffers a sync request for the next [syncFirewallWithHetzner] run.
@@ -207,8 +222,15 @@ internal class HetznerFirewallUpdater(
         }
 
         if (batch.isEmpty()) {
-            LOG.trace("No changes to apply for firewall ID {}", firewall)
-            return
+            if (consecutiveFailures == 0) {
+                LOG.trace("No changes to apply for firewall ID {}", firewall)
+                return
+            }
+            if (runsUntilRetry > 0) {
+                runsUntilRetry--
+                return
+            }
+            LOG.info("Retrying Hetzner firewall sync after {} consecutive failures", consecutiveFailures)
         }
 
         try {
@@ -248,6 +270,8 @@ internal class HetznerFirewallUpdater(
             val success = response.actions.all { it.error == null }
             if (success) {
                 LOG.info("Successfully updated Hetzner firewall rules")
+                consecutiveFailures = 0
+                runsUntilRetry = 0
                 respond(batch)
             } else {
                 LOG.error("Failed to update Hetzner firewall rules: API request failed")
@@ -272,6 +296,8 @@ internal class HetznerFirewallUpdater(
     }
 
     private fun respondWithFailure(batch: List<SyncRequest>) {
+        consecutiveFailures++
+        runsUntilRetry = minOf((1 shl minOf(consecutiveFailures - 1, 5)) - 1, MAX_RETRY_BACKOFF_RUNS)
         respond(batch, "Hetzner firewall update failed")
     }
 
