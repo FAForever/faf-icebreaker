@@ -220,6 +220,7 @@ rabbitmq-password: ${RABBITMQ_PASSWORD:banana}
            level: INFO
 
 "%test":
+  session-cleanup-interval: "off"
   xirsys:
     enabled: false
   cloudflare:
