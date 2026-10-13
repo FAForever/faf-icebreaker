@@ -120,7 +120,12 @@ mp:
       hetzner-response-in:
         connector: smallrye-rabbitmq
         virtual-host: ${RABBITMQ_VHOST:/faf-core}
-        queue: hetzner-response-queue
+        # Every instance needs its own queue: responses must reach the instance that sent the
+        # request, so instances must not compete for messages on a shared queue.
+        queue:
+          name: hetzner-response.${HOSTNAME:local}
+          auto-delete: true
+          exclusive: true
         exchange:
           name: hetzner-response-exchange
     outgoing:
