@@ -1,6 +1,6 @@
 services:
   mariadb:
-    image: docker.io/mariadb:11
+    image: docker.io/mariadb:13
     environment:
       MARIADB_ROOT_PASSWORD: banana
       MARIADB_DATABASE: faf-icebreaker
