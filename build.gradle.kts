@@ -44,7 +44,7 @@ dependencies {
     implementation("io.quarkus:quarkus-rest")
     implementation("io.quarkus:quarkus-flyway")
     implementation("org.flywaydb:flyway-mysql")
-    implementation("com.maxmind.geoip2:geoip2:4.4.0")
+    implementation("com.maxmind.geoip2:geoip2:5.2.0")
     implementation("com.github.seancfoley:ipaddress:5.6.2")
     testImplementation("io.quarkus:quarkus-junit5")
     testImplementation("io.rest-assured:rest-assured")
